@@ -90,6 +90,7 @@ def train():
         iter_time = time()
         sampled_exp = [[]]*_num_players
         _queue_list = []
+        _p_list = []
         _exp = []
         for _th in range(args.thread):
             _q = Queue()
@@ -97,9 +98,11 @@ def train():
             p.start()
             # p.join()
             _queue_list.append(_q)
+            _p_list.append(p)
             # _exp.append(_q.get())
-        for _q in _queue_list:
+        for _i_p, _q in enumerate(_queue_list):
             _exp.append(_q.get())
+            _p_list[_i_p].join()
         print('Time for simulation', time()-iter_time)
         for _tn in range(_s_th):
             for _pid in range(_num_players):
@@ -228,5 +231,6 @@ if __name__ == '__main__':
     parser.add_argument('-si', '--sample_iter', dest='sample_iter', default=100, type=int)
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
+    print(args.thread, args.sample_iter)
     train()
     # test()
