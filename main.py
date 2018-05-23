@@ -16,7 +16,7 @@ from copy import *
 from agent import *
 import cPickle
 from multiprocessing import Process, Lock, Queue, Pool
-import argparse
+import argparse, os
 
 
 args = None
@@ -37,7 +37,9 @@ with open('config.cfg', 'rw') as cfgfile:
 
 def simulation(players, q):
     world = GridRoom()
-    sampled_exp = [[]]*_num_players
+    sampled_exp = []
+    for _p in range(_num_players):
+        sampled_exp.append([])
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
             players[_pid].set_ammo(_ammo)
@@ -63,6 +65,7 @@ def simulation(players, q):
             #     if r[_pid]
             prev_j_ac = copy(joint_action)
             ob = n_state
+        world.reset()
         for _pid in range(_num_players):  # TODO : replace with player 1
             v = 0
             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
@@ -71,8 +74,7 @@ def simulation(players, q):
             # if v < 0:
             #     print(players[_pid].exp_buffer)
             # print(players[_pid].exp_buffer)
-            sampled_exp[_pid].extend(players[_pid].exp_buffer)  # all agents share it if sp is used
-        world.reset()
+            sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
     q.put(sampled_exp)
 
 
@@ -89,7 +91,9 @@ def train():
     _save_fre = _train_iter / 10
     for _iteration in range(_train_iter):
         iter_time = time()
-        sampled_exp = [[]]*_num_players
+        sampled_exp = []
+        for _p in range(_num_players):
+            sampled_exp.append([])
         _queue_list = []
         _p_list = []
         _exp = []
@@ -102,54 +106,15 @@ def train():
             _p_list.append(p)
             # _exp.append(_q.get())
         for _i_p, _q in enumerate(_queue_list):
-            _exp.append(_q.get())
+            exp_from_th = _q.get()
+            # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
+            _exp.append(exp_from_th)
             _p_list[_i_p].join()
         print('Time for simulation', time()-iter_time)
         for _tn in range(_s_th):
             for _pid in range(_num_players):
                 sampled_exp[_pid].extend(_exp[_th][_pid])
-        print(len(sampled_exp[0]), len(sampled_exp[1]))
-        # sampled_exp = simulation(players)
-        # sampled_exp = [[]]*_num_players
-        # for _pid in range(1, _num_players):
-        #     players[_pid].u_s = copy(players[0].u_s)
-        #     players[_pid].u_sa = copy(players[0].u_sa)
-        #     players[_pid].average_strategy = copy(players[0].average_strategy)
-        # for _i in range(_sample_iter):
-        #     for _pid in range(_num_players):
-        #         players[_pid].set_ammo(_ammo)
-        #         players[_pid].exp_buffer = []
-        #     ob = world.cur_state()
-        #     done = False
-        #     prev_j_ac = [9] * _num_players
-        #     while not done:
-        #         joint_action = [9] * _num_players
-        #         for _pid in world.alive_players:
-        #             _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
-        #             if _ac == 0:
-        #                 players[_pid].set_ammo(_ammo)
-        #             joint_action[_pid] = _ac
-        #         done, r, n_state = world.step(joint_action)
-        #         for _pid in world.alive_players:
-        #             players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
-        #                                              str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
-        #         for _pid in world.dead_in_this_step:
-        #             players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
-        #                                              str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
-        #         # for _pid in world.dead_players:
-        #         #     if r[_pid]
-        #         prev_j_ac = copy(joint_action)
-        #         ob = n_state
-        #     for _pid in range(_num_players):  # TODO : replace with player 1
-        #         v = 0
-        #         for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
-        #             players[_pid].exp_buffer[_k][2] += _gamma * v
-        #             v = players[_pid].exp_buffer[_k][2]
-        #         # if v < 0:
-        #         #     print(players[_pid].exp_buffer)
-        #         # print(players[_pid].exp_buffer)
-        #         sampled_exp[_pid].extend(players[_pid].exp_buffer)  # all agents share it if sp is used
-        #     world.reset()
+        print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
         update_time = time()
