@@ -32,14 +32,14 @@ def train():
     players = [RMAgent(i) for i in range(0, _num_players)]
     begin = time()
     # sampled_exp = []
-    for _iteration in range(50000):
+    for _iteration in range(100000):
         sampled_exp = []
         iter_time = time()
         # for _pid in range(1, _num_players):
         #     players[_pid].u_s = copy(players[0].u_s)
         #     players[_pid].u_sa = copy(players[0].u_sa)
         #     players[_pid].average_strategy = copy(players[0].average_strategy)
-        for _i in range(500):
+        for _i in range(1000):
             for _pid in range(_num_players):
                 players[_pid].set_ammo(_num_players - 1)
                 players[_pid].exp_buffer = []
@@ -76,10 +76,12 @@ def train():
             world.reset()
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
-        # update_time = time()
+        update_time = time()
         for _pid in range(_num_players):
             players[_pid].update_policy(sampled_exp)
-        # print('Update time: %.2f' %(time() - update_time))
+        print('Update time: %.2f' %(time() - update_time))
+        if (_iteration + 1) % 100 == 0:
+            print('This is %d step, %.3f' % (_iteration, _iteration/100000.0))
         if (_iteration + 1) % 10000 == 0:
             for _pid in range(_num_players):
                 with open('v{}_{}.pkl'.format(_pid, _iteration / 10000), 'wb') as f:
