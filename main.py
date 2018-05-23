@@ -78,12 +78,13 @@ def simulation(players, q):
     q.put(sampled_exp)
 
 
-def update_pi(player, exp):
+def update_pi(player, exp, q):
     player.update_policy(exp)
+    q.put([player.u_s, player.u_sa, player.average_strategy])
 
 
 def train():
-    world = GridRoom()
+    # world = GridRoom()
     players = [RMAgent(i) for i in range(0, _num_players)]
     begin = time()
     _s_th = args.thread
@@ -114,17 +115,24 @@ def train():
         for _tn in range(_s_th):
             for _pid in range(_num_players):
                 sampled_exp[_pid].extend(_exp[_th][_pid])
-        print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
+        # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
         update_time = time()
         update_list = []
+        update_q_list = []
         for _pid in range(_num_players):
-            p = Process(target=update_pi, args=(copy(players[_pid]), sampled_exp[_pid]))
+            _q = Queue()
+            p = Process(target=update_pi, args=(copy(players[_pid]), sampled_exp[_pid], _q))
             p.start()
             update_list.append(p)
+            update_q_list.append(_q)
             # players[_pid].update_policy(sampled_exp[_pid])
-        for _p in update_list:
+        for _i_p, _p in enumerate(update_list):
+            _updated = update_q_list[_i_p].get()
+            players[_i_p].u_s = _updated[0]
+            players[_i_p].u_sa = _updated[1]
+            players[_i_p].average_strategy = _updated[2]
             _p.join()
         print('Update time: %.2f' %(time() - update_time))
         if (_iteration + 1) % 100 == 0:
