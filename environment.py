@@ -26,6 +26,12 @@ with open('config.cfg', 'rw') as cfgfile:
     _ammo = int(config.get('environ', 'Ammo'))
     _max_step = int(config.get('environ', 'Max_Step'))
     _gamma = float(config.get('environ', 'Gamma'))
+    _kill = float(config.get('environ', 'Kill'))
+    _death = float(config.get('environ', 'Death'))
+    _step = float(config.get('environ', 'Step'))
+    _timeout = float(config.get('environ', 'Timeout'))
+    _only_alive = float(config.get('environ', 'Only_alive'))
+
 
 
 class GridRoom(object):
@@ -51,10 +57,10 @@ class GridRoom(object):
             self.state.append(tmp)
         self.players_pos_dir = [[]]*_num_players
         self.fire_pos_dir = [[]]*_num_players
-        init_position = random.sample(range(_width*_height), _num_players)
-        init_direction = np.random.randint(1, 5, _num_players)
-        # init_position = [0, 1, 2]
-        # init_direction = [4, 4, 4]
+        # init_position = random.sample(range(_width*_height), _num_players)
+        # init_direction = np.random.randint(1, 5, _num_players)
+        init_position = [0, 3]
+        init_direction = [4, 3]
         for i in range(_num_players):
             _pos_y = init_position[i] % _width  # range in (0, width-1)
             _pos_x = init_position[i] // _height  # range in (0, height-1)
@@ -66,11 +72,11 @@ class GridRoom(object):
         self.players_total_reward = [0] * _num_players
         self.time_step = 0
         self.max_step = _max_step
-        self.r_kill = 10.0
-        self.r_death = -10.0
-        self.r_step = -0.0
-        self.r_timeout = -5.0
-        self.r_only_alive = 5.0
+        self.r_kill = _kill
+        self.r_death = _death
+        self.r_step = _step
+        self.r_timeout = _timeout
+        self.r_only_alive = _only_alive
 
     def step(self, joint_action):
         """

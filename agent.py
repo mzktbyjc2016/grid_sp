@@ -11,9 +11,22 @@ from random import *
 import numpy as np
 
 
-class RMAgent(object):
+class Agent(object):
+
+    def __init__(self):
+        pass
+
+    def action(self, state, action_space):
+        pass
+
+    def valid_action(self):
+        pass
+
+
+class RMAgent(Agent):
 
     def __init__(self, player_id=0):
+        super(RMAgent, self).__init__()
         self.id = player_id
         self.u_s = {}
         self.u_sa = {}
@@ -21,8 +34,11 @@ class RMAgent(object):
         self.exp_buffer = []
         self.ammo = 9999
         self.test = False
+        self.unseen = 0
+        self.seen = 0
 
     def action(self, state, action_space):
+        # return choice(action_space)
         if not self.test:
             state_key = str(self.id)+''.join(map(str, state[0]))+str(self.ammo)+''.join(map(str, state[1]))
             if state_key not in self.u_s:
@@ -41,17 +57,23 @@ class RMAgent(object):
                     _imm_regret.append(exp_u_a-exp_u)
                 regret_plus = np.maximum([0] * len(_imm_regret), _imm_regret)
                 if np.sum(regret_plus) > 0:
+                    return np.argmax(regret_plus)
                     prob = np.true_divide(regret_plus, np.sum(regret_plus))  # act according to regret
                 else:
                     prob = np.true_divide(np.ones(len(action_space)), len(action_space))  # uniformly if no regret
                 return np.random.choice(action_space, p=prob)
         else:
-            state_key = ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
+            state_key = str(self.id) + ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
             if state_key in self.average_strategy:
                 frequency = self.average_strategy[state_key]
-                prob = np.true_divide(frequency, sum(frequency))
+                if len(action_space) > 4:
+                    prob = np.true_divide(frequency, sum(frequency))
+                else:
+                    prob = np.true_divide(frequency[1:], sum(frequency[1:]))
+                self.seen += 1
                 return np.random.choice(action_space, p=prob)
             else:
+                self.unseen += 1
                 return choice(action_space)
 
     def valid_action(self):
@@ -82,3 +104,9 @@ class RMAgent(object):
                 self.average_strategy[_item[0]] = ac_v
             else:
                 self.average_strategy[_item[0]][_item[1]] += 1
+
+
+class RandomAgent(RMAgent):
+
+    def action(self, state, action_space):
+        return choice(action_space)
