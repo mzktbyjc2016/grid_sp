@@ -32,7 +32,7 @@ def train():
     players = [RMAgent(i) for i in range(0, _num_players)]
     begin = time()
     # sampled_exp = []
-    for _iteration in range(10000):
+    for _iteration in range(50000):
         sampled_exp = []
         iter_time = time()
         # for _pid in range(1, _num_players):
@@ -55,27 +55,40 @@ def train():
                     joint_action[_pid] = _ac
                 done, r, n_state = world.step(joint_action)
                 for _pid in world.alive_players:
-                    players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) + str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
+                    players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
+                                                     str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
+                for _pid in world.dead_in_this_step:
+                    players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
+                                                     str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
+                # for _pid in world.dead_players:
+                #     if r[_pid]
                 prev_j_ac = copy(joint_action)
                 ob = n_state
-            for _pid in range(1):  # TODO : replace with player 1
+            for _pid in range(_num_players):  # TODO : replace with player 1
                 v = 0
                 for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
                     players[_pid].exp_buffer[_k][2] += _gamma * v
                     v = players[_pid].exp_buffer[_k][2]
-                sampled_exp.extend(players[_pid].exp_buffer)  # all agents share it
+                # if v < 0:
+                #     print(players[_pid].exp_buffer)
+                # print(players[_pid].exp_buffer)
+                sampled_exp.extend(players[_pid].exp_buffer)  # all agents share it if sp is used
             world.reset()
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
-        players[0].update_policy(sampled_exp)
+        # update_time = time()
+        for _pid in range(_num_players):
+            players[_pid].update_policy(sampled_exp)
+        # print('Update time: %.2f' %(time() - update_time))
+        if (_iteration + 1) % 10000 == 0:
+            for _pid in range(_num_players):
+                with open('v{}_{}.pkl'.format(_pid, _iteration / 10000), 'wb') as f:
+                    cPickle.dump(players[0].u_s, f, 2)
+                with open('q{}_{}.pkl'.format(_pid, _iteration / 10000), 'wb') as f:
+                    cPickle.dump(players[0].u_sa, f, 2)
+                with open('pi{}_{}.pkl'.format(_pid, _iteration / 10000), 'wb') as f:
+                    cPickle.dump(players[0].average_strategy, f, 2)
     print('Time eplapsed: %.2f' % (time() - begin))
-    # print(sampled_exp)
-    with open('v.pkl', 'wb') as f:
-        cPickle.dump(players[0].u_s, f, 2)
-    with open('q.pkl', 'wb') as f:
-        cPickle.dump(players[0].u_sa, f, 2)
-    with open('pi.pkl', 'wb') as f:
-        cPickle.dump(players[0].average_strategy, f, 2)
 
 
 def test():
@@ -85,12 +98,12 @@ def test():
         players.append(RandomAgent(i))
     players[0].test = True
     begin = time()
-    # with open('v.pkl', 'rb') as f:
-    #     players[0].u_s = cPickle.load(f)
-    # with open('q.pkl', 'rb') as f:
-    #     players[0].u_sa = cPickle.load(f)
-    # with open('pi.pkl', 'rb') as f:
-    #     players[0].average_strategy = cPickle.load(f)
+    with open('v0.pkl', 'rb') as f:
+        players[0].u_s = cPickle.load(f)
+    with open('q0.pkl', 'rb') as f:
+        players[0].u_sa = cPickle.load(f)
+    with open('pi0.pkl', 'rb') as f:
+        players[0].average_strategy = cPickle.load(f)
     total_r = np.zeros(_num_players)
     print('Time for load model: ', time()-begin, players[0].u_s.__len__(), players[0].u_sa.__len__(), players[0].average_strategy.__len__())
     begin = time()
@@ -133,4 +146,3 @@ def test():
 if __name__ == '__main__':
     train()
     # test()
-

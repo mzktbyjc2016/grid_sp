@@ -68,6 +68,7 @@ class GridRoom(object):
             self.players_pos_dir[i] = [[_pos_x, _pos_y], init_direction[i]]
         self.ammo = [_ammo] * _num_players
         self.dead_players = []
+        self.dead_in_this_step = []
         self.alive_players = range(_num_players)
         self.players_total_reward = [0] * _num_players
         self.time_step = 0
@@ -84,6 +85,7 @@ class GridRoom(object):
         :return: the next state after joint actions are made and the joint reward
         """
         reward = [self.r_step]*_num_players
+        self.dead_in_this_step = []
         is_terminal = False
         for _p in self.dead_players:
             reward[_p] = 0
@@ -130,6 +132,7 @@ class GridRoom(object):
                 self.dead_players.append(player_id)
                 reward[player_id] += self.r_death
                 reward[_id] += self.r_kill
+                self.dead_in_this_step.append(player_id)
                 # print('{} is killed by {}'.format(player_id, _id))
         self.alive_players = [k for k in range(_num_players) if k not in self.dead_players]
         if len(self.alive_players) == 1:

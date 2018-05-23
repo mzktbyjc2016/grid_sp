@@ -42,6 +42,7 @@ class RMAgent(Agent):
         if not self.test:
             state_key = str(self.id)+''.join(map(str, state[0]))+str(self.ammo)+''.join(map(str, state[1]))
             if state_key not in self.u_s:
+                self.unseen += 1
                 return choice(action_space)
             else:
                 _imm_regret = []
@@ -56,8 +57,9 @@ class RMAgent(Agent):
                         exp_u_a = var_u_sa[0]/var_u_sa[1]
                     _imm_regret.append(exp_u_a-exp_u)
                 regret_plus = np.maximum([0] * len(_imm_regret), _imm_regret)
+                self.seen += 1
                 if np.sum(regret_plus) > 0:
-                    return np.argmax(regret_plus)
+                    # return np.argmax(regret_plus)
                     prob = np.true_divide(regret_plus, np.sum(regret_plus))  # act according to regret
                 else:
                     prob = np.true_divide(np.ones(len(action_space)), len(action_space))  # uniformly if no regret
