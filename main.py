@@ -16,7 +16,10 @@ from copy import *
 from agent import *
 import cPickle
 from multiprocessing import Process, Lock, Queue, Pool
+import argparse
 
+
+args = None
 config = ConfigParser.ConfigParser()
 with open('config.cfg', 'rw') as cfgfile:
     config.readfp(cfgfile)
@@ -35,7 +38,7 @@ with open('config.cfg', 'rw') as cfgfile:
 def simulation(players, q):
     world = GridRoom()
     sampled_exp = [[]]*_num_players
-    for _i in range(_sample_iter):
+    for _i in range(args.sample_iter):
         for _pid in range(_num_players):
             players[_pid].set_ammo(_ammo)
             players[_pid].exp_buffer = []
@@ -88,7 +91,7 @@ def train():
         sampled_exp = [[]]*_num_players
         _queue_list = []
         _exp = []
-        for _th in range(_s_th):
+        for _th in range(args.thread):
             _q = Queue()
             p = Process(target=simulation, args=(copy(players), _q,))
             p.start()
@@ -221,5 +224,9 @@ def test():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=None)
+    parser.add_argument('-si', '--sample_iter', dest='sample_iter', default=100, type=int)
+    parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
+    args = parser.parse_args()
     train()
     # test()
