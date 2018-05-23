@@ -32,7 +32,7 @@ with open('config.cfg', 'rw') as cfgfile:
     _train_iter = int(config.get('algorithm', 'train_iter'))
     _sample_iter = int(config.get('algorithm', 'sample_iter'))
     _test_iter = int(config.get('algorithm', 'test_iter'))
-    _s_th = int(config.get('algorithm', 'simulation_thread'))
+    # _s_th = int(config.get('algorithm', 'simulation_thread'))
 
 
 def simulation(players, q):
@@ -84,6 +84,7 @@ def train():
     world = GridRoom()
     players = [RMAgent(i) for i in range(0, _num_players)]
     begin = time()
+    _s_th = args.thread
     # sampled_exp = []
     _save_fre = _train_iter / 10
     for _iteration in range(_train_iter):
@@ -92,7 +93,7 @@ def train():
         _queue_list = []
         _p_list = []
         _exp = []
-        for _th in range(args.thread):
+        for _th in range(_s_th):
             _q = Queue()
             p = Process(target=simulation, args=(copy(players), _q,))
             p.start()
