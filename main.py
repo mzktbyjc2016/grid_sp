@@ -86,12 +86,16 @@ def train():
     for _iteration in range(_train_iter):
         iter_time = time()
         sampled_exp = [[]]*_num_players
+        _queue_list = []
         _exp = []
         for _th in range(_s_th):
             _q = Queue()
             p = Process(target=simulation, args=(copy(players), _q,))
             p.start()
             # p.join()
+            _queue_list.append(_q)
+            # _exp.append(_q.get())
+        for _q in _queue_list:
             _exp.append(_q.get())
         print('Time for simulation', time()-iter_time)
         for _tn in range(_s_th):
