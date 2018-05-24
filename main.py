@@ -86,6 +86,13 @@ def update_pi(player, exp, q):
 def train():
     # world = GridRoom()
     players = [RMAgent(i) for i in range(0, _num_players)]
+    for _i in range(_num_players):
+        with open('v{}_2.999.pkl'.format(_i), 'rb') as f:
+            players[_i].u_s = cPickle.load(f)
+        with open('q{}_2.999.pkl'.format(_i), 'rb') as f:
+            players[_i].u_sa = cPickle.load(f)
+        with open('pi{}_2.999.pkl'.format(_i), 'rb') as f:
+            players[_i].average_strategy = cPickle.load(f)
     begin = time()
     _s_th = args.thread
     # sampled_exp = []
@@ -110,7 +117,7 @@ def train():
             exp_from_th = _q.get()
             # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
             _exp.append(exp_from_th)
-            _p_list[_i_p].join()
+            # _p_list[_i_p].join()
         print('Time for simulation', time()-iter_time)
         for _tn in range(_s_th):
             for _pid in range(_num_players):
@@ -139,11 +146,11 @@ def train():
             print('This is %d step, %.3f' % (_iteration, _iteration/100000.0))
         if (_iteration + 1) % _save_fre == 0:
             for _pid in range(_num_players):
-                with open('v{}_{}.pkl'.format(_pid, _iteration / _save_fre), 'wb') as f:
+                with open('v{}_{}.pkl'.format(_pid, (_iteration+1) // _save_fre), 'wb') as f:
                     cPickle.dump(players[0].u_s, f, 2)
-                with open('q{}_{}.pkl'.format(_pid, _iteration / _save_fre), 'wb') as f:
+                with open('q{}_{}.pkl'.format(_pid, (_iteration+1) // _save_fre), 'wb') as f:
                     cPickle.dump(players[0].u_sa, f, 2)
-                with open('pi{}_{}.pkl'.format(_pid, _iteration / _save_fre), 'wb') as f:
+                with open('pi{}_{}.pkl'.format(_pid, (_iteration+1) // _save_fre), 'wb') as f:
                     cPickle.dump(players[0].average_strategy, f, 2)
     print('Time eplapsed: %.2f' % (time() - begin))
 
