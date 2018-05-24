@@ -61,6 +61,8 @@ class RMAgent(Agent):
                 if np.sum(regret_plus) > 0:
                     # return np.argmax(regret_plus)
                     prob = np.true_divide(regret_plus, np.sum(regret_plus))  # act according to regret
+                    # if np.random.random() < 1e-1:
+                    #     print(prob)
                 else:
                     prob = np.true_divide(np.ones(len(action_space)), len(action_space))  # uniformly if no regret
                 return np.random.choice(action_space, p=prob)
@@ -73,6 +75,8 @@ class RMAgent(Agent):
                 else:
                     prob = np.true_divide(frequency[1:], sum(frequency[1:]))
                 self.seen += 1
+                # if np.random.random() < 1e-3:
+                #     print(prob)
                 return np.random.choice(action_space, p=prob)
             else:
                 self.unseen += 1
