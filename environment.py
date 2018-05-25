@@ -57,7 +57,7 @@ class GridRoom(object):
             self.state.append(tmp)
         self.players_pos_dir = [[]]*_num_players
         self.fire_pos_dir = [[]]*_num_players
-        init_position = random.sample([_i**2-1 for _i in range(1, _height+1)], _num_players)
+        init_position = random.sample([_i*(_height+1) for _i in range( _height)], _num_players)
         init_direction = np.random.randint(1, 5, _num_players)
         # init_position = [0, 3]
         # init_direction = [4, 3]

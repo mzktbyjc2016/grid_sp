@@ -85,8 +85,8 @@ def update_pi(player, exp, q):
 
 def train():
     # world = GridRoom()
-    players = [RMAgent(i) for i in range(0, _num_players)]
-    for _i in range(_num_players):
+    players = [RMAgent(i) for i in range(_num_players)]
+    for _i in range(0):
         with open('v{}_3.999.pkl'.format(_i), 'rb') as f:
             players[_i].u_s = cPickle.load(f)
         with open('q{}_3.999.pkl'.format(_i), 'rb') as f:
@@ -142,6 +142,7 @@ def train():
             players[_i_p].average_strategy = _updated[2]
             _p.join()
         print('Update time: %.2f' %(time() - update_time))
+        print('state has seen', len(players[0].u_s), len(players[1].u_s))
         if (_iteration + 1) % 100 == 0:
             print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
         if (_iteration + 1) % _save_fre == 0:
@@ -157,20 +158,21 @@ def train():
 
 def test():
     world = GridRoom()
-    players = [RMAgent(0), RMAgent(1)]
+    players = [RMAgent(i) for i in range(3)]
     for _k in range(1, 11):
         players[0].seen = 0
         players[0].unseen = 0
-        for _i in range(_num_players):
+        for _i in range(_num_players-2):
             with open('v{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].u_s = cPickle.load(f)
             with open('q{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].u_sa = cPickle.load(f)
             with open('pi{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].average_strategy = cPickle.load(f)
-        # for i in range(1, _num_players):
+        # for i in range(1, _num_players+1):
         #     players.append(RandomAgent(i))
-        players[0].test = False
+            players[_i].test = True
+        
         begin = time()
         # with open('v0.pkl', 'rb') as f:
         #     players[0].u_s = cPickle.load(f)
@@ -225,5 +227,5 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
-    # train()
-    test()
+    train()
+    # test()
