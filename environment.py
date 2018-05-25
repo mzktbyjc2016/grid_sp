@@ -164,9 +164,9 @@ class GridRoom(object):
     def cur_state(self):
         _state = [0] * 3 * _num_players
         for _p in self.alive_players:
-            _state[_p] = self.players_pos_dir[_p][0][0]
-            _state[_p+1] = self.players_pos_dir[_p][0][1]
-            _state[_p+2] = self.players_pos_dir[_p][1]
+            _state[_p*3] = self.players_pos_dir[_p][0][0]
+            _state[_p*3+1] = self.players_pos_dir[_p][0][1]
+            _state[_p*3+2] = self.players_pos_dir[_p][1]
         return _state
 
     def print_state(self):

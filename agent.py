@@ -10,7 +10,6 @@
 from random import *
 import numpy as np
 
-
 class Agent(object):
 
     def __init__(self):
@@ -38,6 +37,7 @@ class RMAgent(Agent):
         self.seen = 0
         self._iter = 0
         self.exploration = True
+        self.wtk = set()
 
     def action(self, state, action_space):
         # return choice(action_space)
@@ -47,6 +47,7 @@ class RMAgent(Agent):
                 return choice(action_space)
             if state_key not in self.u_s:
                 self.unseen += 1
+                self.wtk.add(state_key)
                 return choice(action_space)
             else:
                 _imm_regret = []
@@ -65,6 +66,8 @@ class RMAgent(Agent):
                 if np.sum(regret_plus) > 0:
                     # return np.argmax(regret_plus)
                     prob = np.true_divide(regret_plus, np.sum(regret_plus))  # act according to regret
+                    # if prob.tolist().count(0) < len(action_space) - 1:
+                    #     print(self.id, prob)
                     # if np.random.random() < 1e-1:
                     #     print(prob)
                 else:
@@ -80,9 +83,11 @@ class RMAgent(Agent):
                     prob = np.true_divide(frequency[1:], sum(frequency[1:]))
                 self.seen += 1
                 # if np.random.random() < 1e-3:
-                #     print(prob)
+                # if prob.tolist().count(0) < len(action_space) - 1 or prob[0] == 1:
+                #     print(self.id, prob)
                 return np.random.choice(action_space, p=prob)
             else:
+                self.wtk.add(state_key)
                 self.unseen += 1
                 return choice(action_space)
 
@@ -108,13 +113,13 @@ class RMAgent(Agent):
             else:
                 self.u_sa[s_a_key][0] += _item[2]
                 self.u_sa[s_a_key][1] += 1
-            if self._iter > 200:
-                if _item[0] not in self.average_strategy:
-                    ac_v = [0]*5
-                    ac_v[_item[1]] = 1
-                    self.average_strategy[_item[0]] = ac_v
-                else:
-                    self.average_strategy[_item[0]][_item[1]] += 1
+            # if self._iter > 200:
+            if _item[0] not in self.average_strategy:
+                ac_v = [0]*5
+                ac_v[_item[1]] = 1
+                self.average_strategy[_item[0]] = ac_v
+            else:
+                self.average_strategy[_item[0]][_item[1]] += 1
 
 
 class RandomAgent(RMAgent):

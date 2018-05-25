@@ -43,7 +43,7 @@ def simulation(players, q, _seed, cur_iter):
         sampled_exp.append([])
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
-            if np.random.random() < 20.0/cur_iter:
+            if np.random.random() < 10.0 / cur_iter:
                 players[_pid].exploration = True
             players[_pid].set_ammo(_ammo)
             players[_pid].exp_buffer = []
@@ -55,7 +55,7 @@ def simulation(players, q, _seed, cur_iter):
             for _pid in world.alive_players:
                 _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
                 if _ac == 0:
-                    players[_pid].set_ammo(_ammo)
+                    players[_pid].set_ammo(players[_pid].ammo-1)
                 joint_action[_pid] = _ac
             done, r, n_state = world.step(joint_action)
             for _pid in world.alive_players:
@@ -154,40 +154,36 @@ def train():
         if (_iteration + 1) % _save_fre == 0:
             for _pid in range(_num_players):
                 with open('v{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[0].u_s, f, 2)
+                    cPickle.dump(players[_pid].u_s, f, 2)
                 with open('q{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[0].u_sa, f, 2)
+                    cPickle.dump(players[_pid].u_sa, f, 2)
                 with open('pi{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[0].average_strategy, f, 2)
+                    cPickle.dump(players[_pid].average_strategy, f, 2)
     print('Time eplapsed: %.2f' % (time() - begin))
 
 
 def test():
     world = GridRoom()
-    players = [RMAgent(i) for i in range(3)]
+    players = [RMAgent(i) for i in range(_num_players)]
     for _k in range(1, 11):
         players[0].seen = 0
         players[0].unseen = 0
-        for _i in range(_num_players-2):
+        players[1].seen = 0
+        players[1].unseen = 0
+        for _i in range(_num_players):
+            begin = time()
             with open('v{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].u_s = cPickle.load(f)
             with open('q{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].u_sa = cPickle.load(f)
             with open('pi{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].average_strategy = cPickle.load(f)
-        # for i in range(1, _num_players+1):
-        #     players.append(RandomAgent(i))
-            players[_i].test = True
-        
-        begin = time()
-        # with open('v0.pkl', 'rb') as f:
-        #     players[0].u_s = cPickle.load(f)
-        # with open('q0.pkl', 'rb') as f:
-        #     players[0].u_sa = cPickle.load(f)
-        # with open('pi0.pkl', 'rb') as f:
-        #     players[0].average_strategy = cPickle.load(f)
+            players[_i].test = False
+            players[_i].exploration = False
+            print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
+        players[0].test = True
+        # players[0].exploration = False
         total_r = np.zeros(_num_players)
-        print('Time for load model: ', time()-begin, players[0].u_s.__len__(), players[0].u_sa.__len__(), players[0].average_strategy.__len__())
         begin = time()
         # sampled_exp = []
         step = 0.0
@@ -215,7 +211,8 @@ def test():
             # print('Episode time: %.2f' % (time() - begin))
         print('Time eplapsed: %.2f min' % ((time() - begin)/60.0))
         print(total_r)
-        print('unseen, seen, average step', players[0].unseen, players[0].seen, step/_test_iter)
+        for _pid in range(_num_players):
+            print('unseen, seen, average step', players[_pid].unseen, players[_pid].seen, step/_test_iter)
         # for _key, _item in players[0].u_s.iteritems():
         #     print(_key, _item)
         # print('------------')
