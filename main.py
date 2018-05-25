@@ -36,13 +36,15 @@ with open('config.cfg', 'rw') as cfgfile:
     # _s_th = int(config.get('algorithm', 'simulation_thread'))
 
 
-def simulation(players, q, _seed):
+def simulation(players, q, _seed, cur_iter):
     world = GridRoom(_seed)
     sampled_exp = []
     for _p in range(_num_players):
         sampled_exp.append([])
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
+            if random.random() < 20.0/cur_iter:
+                players[_pid].exploration = True
             players[_pid].set_ammo(_ammo)
             players[_pid].exp_buffer = []
         ob = world.cur_state()

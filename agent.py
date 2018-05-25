@@ -37,12 +37,13 @@ class RMAgent(Agent):
         self.unseen = 0
         self.seen = 0
         self._iter = 0
+        self.exploration = True
 
     def action(self, state, action_space):
         # return choice(action_space)
         if not self.test:
             state_key = str(self.id)+''.join(map(str, state[0]))+str(self.ammo)+''.join(map(str, state[1]))
-            if random() < 20.0/(self._iter+1):
+            if self.exploration:
                 return choice(action_space)
             if state_key not in self.u_s:
                 self.unseen += 1
