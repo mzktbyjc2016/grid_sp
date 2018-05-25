@@ -48,8 +48,12 @@ class GridRoom(object):
     PLAYERUNKNOWN’S BATTLEGROUNDS.
     """
 
-    def __init__(self):
+    def __init__(self, seed=None):
         self.state = []
+        self.seed = seed
+        if self.seed is not None:
+            random.seed(self.seed)
+            np.random.seed(self.seed)
         for row in range(_width):
             tmp = []
             for col in range(_height):
@@ -152,6 +156,9 @@ class GridRoom(object):
         return is_terminal, reward, next_state
 
     def reset(self):
+        # _seed = self.seed
+        # self.__init__(_seed)
+        # self.seed = _seed
         self.__init__()
 
     def cur_state(self):
@@ -194,6 +201,9 @@ class GridRoom(object):
                 return np.dot((0, pos2[1] - pos1[1]), (0, (-1)**dir1)) > 0
             else:  # in the same column
                 return np.dot((pos2[0]-pos1[0], 0), ((-1)**dir1, 0)) > 0
+
+    def set_seed(self, seed=1):
+        self.seed = seed
 
 
 if False:

@@ -12,6 +12,7 @@ import ConfigParser
 from environment import GridRoom
 from time import *
 import numpy as np
+import random
 from copy import *
 from agent import *
 import cPickle
@@ -35,8 +36,8 @@ with open('config.cfg', 'rw') as cfgfile:
     # _s_th = int(config.get('algorithm', 'simulation_thread'))
 
 
-def simulation(players, q):
-    world = GridRoom()
+def simulation(players, q, _seed):
+    world = GridRoom(_seed)
     sampled_exp = []
     for _p in range(_num_players):
         sampled_exp.append([])
@@ -107,7 +108,7 @@ def train():
         _exp = []
         for _th in range(_s_th):
             _q = Queue()
-            p = Process(target=simulation, args=(copy(players), _q,))
+            p = Process(target=simulation, args=(copy(players), _q, _th*13+1))
             p.start()
             # p.join()
             _queue_list.append(_q)
@@ -118,8 +119,9 @@ def train():
             # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
             _exp.append(exp_from_th)
             # _p_list[_i_p].join()
+        print(len(_exp[0][0]), len(_exp[1][0]))
         print('Time for simulation', time()-iter_time)
-        for _tn in range(_s_th):
+        for _th in range(_s_th):
             for _pid in range(_num_players):
                 sampled_exp[_pid].extend(_exp[_th][_pid])
         # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
