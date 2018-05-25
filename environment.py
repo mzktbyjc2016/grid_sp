@@ -147,9 +147,9 @@ class GridRoom(object):
             if _id not in self.dead_players:
                 self.fire_pos_dir[_id] = [[self.players_pos_dir[_id][0][0], self.players_pos_dir[_id][0][1]], self.players_pos_dir[_id][1]]
         for _p in self.alive_players:
-            next_state[_p] = self.players_pos_dir[_p][0][0]
-            next_state[_p+1] = self.players_pos_dir[_p][0][1]
-            next_state[_p+2] = self.players_pos_dir[_p][1]
+            next_state[_p*3] = self.players_pos_dir[_p][0][0]
+            next_state[_p*3+1] = self.players_pos_dir[_p][0][1]
+            next_state[_p*3+2] = self.players_pos_dir[_p][1]
         for _p in range(_num_players):
             self.players_total_reward[_p] += reward[_p]
         self.time_step += 1
