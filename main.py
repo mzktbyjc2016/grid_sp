@@ -108,7 +108,7 @@ def train():
         _exp = []
         for _th in range(_s_th):
             _q = Queue()
-            p = Process(target=simulation, args=(copy(players), _q, _th*13+1))
+            p = Process(target=simulation, args=(copy(players), _q, None))
             p.start()
             # p.join()
             _queue_list.append(_q)
@@ -145,6 +145,8 @@ def train():
             _p.join()
         print('Update time: %.2f' %(time() - update_time))
         print('state has seen', len(players[0].u_s), len(players[1].u_s))
+        for _pid in range(_num_players):
+            players[_pid]._iter += 1
         if (_iteration + 1) % 100 == 0:
             print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
         if (_iteration + 1) % _save_fre == 0:

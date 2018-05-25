@@ -36,11 +36,14 @@ class RMAgent(Agent):
         self.test = False
         self.unseen = 0
         self.seen = 0
+        self._iter = 0
 
     def action(self, state, action_space):
         # return choice(action_space)
         if not self.test:
             state_key = str(self.id)+''.join(map(str, state[0]))+str(self.ammo)+''.join(map(str, state[1]))
+            if random() < 20.0/(self._iter+1):
+                return choice(action_space)
             if state_key not in self.u_s:
                 self.unseen += 1
                 return choice(action_space)
@@ -104,12 +107,13 @@ class RMAgent(Agent):
             else:
                 self.u_sa[s_a_key][0] += _item[2]
                 self.u_sa[s_a_key][1] += 1
-            if _item[0] not in self.average_strategy:
-                ac_v = [0]*5
-                ac_v[_item[1]] = 1
-                self.average_strategy[_item[0]] = ac_v
-            else:
-                self.average_strategy[_item[0]][_item[1]] += 1
+            if self._iter > 200:
+                if _item[0] not in self.average_strategy:
+                    ac_v = [0]*5
+                    ac_v[_item[1]] = 1
+                    self.average_strategy[_item[0]] = ac_v
+                else:
+                    self.average_strategy[_item[0]][_item[1]] += 1
 
 
 class RandomAgent(RMAgent):
