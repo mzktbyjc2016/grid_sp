@@ -43,7 +43,7 @@ def simulation(players, q, _seed, cur_iter):
         sampled_exp.append([])
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
-            if random.random() < 20.0/cur_iter:
+            if np.random.random() < 20.0/cur_iter:
                 players[_pid].exploration = True
             players[_pid].set_ammo(_ammo)
             players[_pid].exp_buffer = []
@@ -110,7 +110,7 @@ def train():
         _exp = []
         for _th in range(_s_th):
             _q = Queue()
-            p = Process(target=simulation, args=(copy(players), _q, None))
+            p = Process(target=simulation, args=(copy(players), _q, None, _iteration+1))
             p.start()
             # p.join()
             _queue_list.append(_q)
