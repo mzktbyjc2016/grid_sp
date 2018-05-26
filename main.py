@@ -17,7 +17,7 @@ from copy import *
 from agent import *
 import cPickle
 from multiprocessing import Process, Lock, Queue, Pool
-import argparse, os
+import argparse, os, gc
 
 
 args = None
@@ -54,8 +54,6 @@ def simulation(players, q, _seed, cur_iter):
             joint_action = [9] * _num_players
             for _pid in world.alive_players:
                 _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
-                if _ac == 0:
-                    players[_pid].set_ammo(players[_pid].ammo-1)
                 joint_action[_pid] = _ac
             done, r, n_state = world.step(joint_action)
             for _pid in world.alive_players:
@@ -64,8 +62,9 @@ def simulation(players, q, _seed, cur_iter):
             for _pid in world.dead_in_this_step:
                 players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
                                                  str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
-            # for _pid in world.dead_players:
-            #     if r[_pid]
+            for _pid, _ac in enumerate(joint_action):
+                if _ac == 0:
+                    players[_pid].set_ammo(players[_pid].ammo-1)
             prev_j_ac = copy(joint_action)
             ob = n_state
         world.reset()
@@ -149,6 +148,7 @@ def train():
         print('state has seen', len(players[0].u_s), len(players[1].u_s))
         for _pid in range(_num_players):
             players[_pid]._iter += 1
+        gc.collect()
         if (_iteration + 1) % 100 == 0:
             print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
         if (_iteration + 1) % _save_fre == 0:
@@ -181,8 +181,8 @@ def test():
             players[_i].test = False
             players[_i].exploration = False
             print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
-        players[0].test = True
-        # players[0].exploration = False
+        # players[0].test = False
+        # players[0].exploration = True
         total_r = np.zeros(_num_players)
         begin = time()
         # sampled_exp = []
@@ -199,12 +199,13 @@ def test():
                     joint_action = [9] * _num_players
                     for _pid in world.alive_players:
                         _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
-                        if _ac == 0:
-                            players[_pid].set_ammo(players[_pid].ammo - 1)
                         joint_action[_pid] = _ac
                     done, r, n_state = world.step(joint_action)
                     prev_j_ac = copy(joint_action)
                     ob = n_state
+                    for _pid, _ac in enumerate(joint_action):
+                        if _ac == 0:
+                            players[_pid].set_ammo(players[_pid].ammo - 1)
                 total_r = np.add(total_r, world.players_total_reward)
                 step += world.time_step
                 world.reset()
@@ -230,5 +231,10 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
-    train()
-    # test()
+    # train()
+    test()
+    # players = [RMAgent(i) for i in range(_num_players)]
+    # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:
+    #     players[0].average_strategy = cPickle.load(f)
+    # for i in players[0].average_strategy:
+    #     print(i, players[0].average_strategy[i])
