@@ -43,7 +43,7 @@ def simulation(players, q, _seed, cur_iter):
         sampled_exp.append([])
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
-            if np.random.random() < 10.0 / cur_iter:
+            if cur_iter < 2:
                 players[_pid].exploration = True
             players[_pid].set_ammo(_ammo)
             players[_pid].exp_buffer = []
@@ -178,11 +178,11 @@ def test():
                 players[_i].u_sa = cPickle.load(f)
             with open('pi{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].average_strategy = cPickle.load(f)
-            players[_i].test = False
+            players[_i].test = True
             players[_i].exploration = False
             print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
-        # players[0].test = False
-        # players[0].exploration = True
+        players[1].test = False
+        players[1].exploration = False
         total_r = np.zeros(_num_players)
         begin = time()
         # sampled_exp = []
@@ -231,8 +231,8 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
-    # train()
-    test()
+    train()
+    # test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:
     #     players[0].average_strategy = cPickle.load(f)

@@ -36,7 +36,7 @@ class RMAgent(Agent):
         self.unseen = 0
         self.seen = 0
         self._iter = 0
-        self.exploration = True
+        self.exploration = False
         self.wtk = set()
 
     def action(self, state, action_space):
@@ -66,10 +66,12 @@ class RMAgent(Agent):
                 if np.sum(regret_plus) > 0:
                     # return np.argmax(regret_plus)
                     prob = np.true_divide(regret_plus, np.sum(regret_plus))  # act according to regret
+                    # print(prob)
                     # if prob.tolist().count(0) < len(action_space) - 1:
                     #     print(self.id, prob)
                     # if np.random.random() < 1e-1:
                     #     print(prob)
+                    # print(prob)
                 else:
                     prob = np.true_divide(np.ones(len(action_space)), len(action_space))  # uniformly if no regret
                 return np.random.choice(action_space, p=prob)
@@ -101,6 +103,7 @@ class RMAgent(Agent):
         self.ammo = amount
 
     def update_policy(self, experience):
+        print('iter: ', self._iter)
         for _item in experience:  # each item is [state, action, return]
             if _item[0] not in self.u_s:
                 self.u_s[_item[0]] = [_item[2], 1]
@@ -113,7 +116,6 @@ class RMAgent(Agent):
             else:
                 self.u_sa[s_a_key][0] += _item[2]
                 self.u_sa[s_a_key][1] += 1
-            # if self._iter > 200:
             if _item[0] not in self.average_strategy:
                 ac_v = [0]*5
                 ac_v[_item[1]] = 1
