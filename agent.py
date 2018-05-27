@@ -78,9 +78,13 @@ class RMAgent(Agent):
         else:
             state_key = str(self.id) + ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
             if state_key in self.average_strategy:
+                self.wtk.add(state_key)
                 frequency = self.average_strategy[state_key]
                 if len(action_space) > 4:
                     prob = np.true_divide(frequency, sum(frequency))
+                    if state_key not in self.wtk and prob[0] > 0.2:
+                        with open('{}.prob'.format(self.id), 'ab+') as f:
+                            f.write(state_key + ' ' +str(prob)+'\n')
                 else:
                     prob = np.true_divide(frequency[1:], sum(frequency[1:]))
                 self.seen += 1
@@ -128,3 +132,28 @@ class RandomAgent(RMAgent):
 
     def action(self, state, action_space):
         return choice(action_space)
+
+
+class ShootingAgent(RMAgent):
+
+    def action(self, state, action_space):
+        # state_key = str(self.id) + ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
+        if state[1][0] == 0:
+            if state[0][0] == state[0][3] and state[0][1] == state[0][4] or state[0][0] != state[0][3] and state[0][1] != state[0][4]:
+                if state[0][3] == 0 and state[0][4] == 0:
+                    return 3
+                elif state[0][3] == 0 and state[0][4] == 1:
+                    return 2
+                elif state[0][3] == 1 and state[0][4] == 0:
+                    return 1
+                else:
+                    return 4
+            else:
+                if state[0][3] == 0:
+                    return 4
+                if state[0][3] == 1:
+                    return 3
+        elif self.ammo > 0 and np.random.random() < 0.8:
+            return 0
+        else:
+            return choice(range(1, 5))

@@ -143,6 +143,7 @@ class GridRoom(object):
             is_terminal = True
             reward[self.alive_players[0]] += self.r_only_alive
 
+        self.fire_pos_dir = [[]] * _num_players
         for _id in fired_players:
             if _id not in self.dead_players:
                 self.fire_pos_dir[_id] = [[self.players_pos_dir[_id][0][0], self.players_pos_dir[_id][0][1]], self.players_pos_dir[_id][1]]
