@@ -78,13 +78,13 @@ class RMAgent(Agent):
         else:
             state_key = str(self.id) + ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
             if state_key in self.average_strategy:
-                self.wtk.add(state_key)
                 frequency = self.average_strategy[state_key]
                 if len(action_space) > 4:
                     prob = np.true_divide(frequency, sum(frequency))
                     if state_key not in self.wtk and prob[0] > 0.2:
                         with open('{}.prob'.format(self.id), 'ab+') as f:
-                            f.write(state_key + ' ' +str(prob)+'\n')
+                            f.write(state_key + ' ' + str(prob)+'\n')
+                        self.wtk.add(state_key)
                 else:
                     prob = np.true_divide(frequency[1:], sum(frequency[1:]))
                 self.seen += 1
@@ -153,7 +153,56 @@ class ShootingAgent(RMAgent):
                     return 4
                 if state[0][3] == 1:
                     return 3
-        elif self.ammo > 0 and np.random.random() < 0.8:
+        elif self.ammo > 0 and np.random.random() < 1:
             return 0
         else:
             return choice(range(1, 5))
+
+
+class ShootingAgent1(RMAgent):
+
+    def action(self, state, action_space):
+        # state_key = str(self.id) + ''.join(map(str, state[0])) + str(self.ammo) + ''.join(map(str, state[1]))
+        if state[1][0] == 0:
+            if state[0][0] == state[0][3] and state[0][1] == state[0][4] or state[0][0] != state[0][3] and state[0][1] != state[0][4]:
+                if state[0][3] == 0 and state[0][4] == 0:
+                    return 3
+                elif state[0][3] == 0 and state[0][4] == 1:
+                    return 2
+                elif state[0][3] == 1 and state[0][4] == 0:
+                    return 1
+                else:
+                    return 4
+            else:
+                if state[0][3] == 0:
+                    return 4
+                if state[0][3] == 1:
+                    return 3
+        elif self.ammo > 0:
+            if self.is_in_front([state[0][3], state[0][4]], state[0][5], [state[0][0], state[0][1]])  and np.random.random() < 1:
+                return 0
+            else:
+                return choice(range(1, 5))
+        else:
+            return choice(range(1, 5))
+
+    @staticmethod
+    def is_in_front(pos1, dir1, pos2):
+        """
+        use this function to judge whether the position2 is in front of the ammo
+        :param pos1: some ammo's position
+        :param dir1: some ammo's direction
+        :param pos2: some player's position
+        :return: Boolean
+        """
+        if (pos1[0]-pos2[0])*(pos1[1]-pos2[1]) != 0:  # not in the same horizontal or vertical line
+            return False
+        else:
+            if pos1[0] == pos2[0]:  # in the same row and will return False when pos1 coincides with pos2
+                if dir1 == 3 or dir1 == 4:
+                    return False
+                return np.dot((0, pos2[1] - pos1[1]), (0, (-1)**dir1)) > 0
+            else:  # in the same column
+                if dir1 == 1 or dir1 ==2:
+                    return False
+                return np.dot((pos2[0]-pos1[0], 0), ((-1)**dir1, 0)) > 0

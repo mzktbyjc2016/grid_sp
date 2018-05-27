@@ -199,8 +199,12 @@ class GridRoom(object):
             return False
         else:
             if pos1[0] == pos2[0]:  # in the same row and will return False when pos1 coincides with pos2
+                if dir1 == 3 or dir1 == 4:
+                    return False
                 return np.dot((0, pos2[1] - pos1[1]), (0, (-1)**dir1)) > 0
             else:  # in the same column
+                if dir1 == 1 or dir1 == 2:
+                    return False
                 return np.dot((pos2[0]-pos1[0], 0), ((-1)**dir1, 0)) > 0
 
     def set_seed(self, seed=1):
