@@ -34,6 +34,11 @@ with open('config.cfg', 'rw') as cfgfile:
     _sample_iter = int(config.get('algorithm', 'sample_iter'))
     _test_iter = int(config.get('algorithm', 'test_iter'))
     # _s_th = int(config.get('algorithm', 'simulation_thread'))
+    _frame_stack = int(config.get('environ', 'Frame_stack'))
+
+
+def one_hot(_index, dim):
+    return np.eye(dim)[np.reshape(_index, -1)]
 
 
 def simulation(players, q, _seed, cur_iter):
@@ -57,11 +62,9 @@ def simulation(players, q, _seed, cur_iter):
                 joint_action[_pid] = _ac
             done, r, n_state = world.step(joint_action)
             for _pid in world.alive_players:
-                players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
-                                                 str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
+                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
             for _pid in world.dead_in_this_step:
-                players[_pid].exp_buffer.append([str(_pid) + ''.join(map(str, ob)) +
-                                                 str(players[_pid].ammo) + ''.join(map(str, prev_j_ac)), joint_action[_pid], r[_pid]])
+                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
             for _pid, _ac in enumerate(joint_action):
                 if _ac == 0:
                     players[_pid].set_ammo(players[_pid].ammo-1)
@@ -164,13 +167,16 @@ def train():
 
 def test():
     world = GridRoom()
-    players = [RMAgent(i) for i in range(_num_players)]
-    for _k in range(1, 11):
+    players = [NRMAgent(i) for i in range(_num_players)]
+    # players.append(RandomAgent(1))
+    # players[0] = ShootingAgent(0)
+    # players[1] = ShootingAgent1(1)
+    for _k in range(1, 2):
         players[0].seen = 0
         players[0].unseen = 0
         players[1].seen = 0
         players[1].unseen = 0
-        for _i in range(_num_players):
+        for _i in range(_num_players-_num_players):
             begin = time()
             with open('v{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].u_s = cPickle.load(f)
@@ -178,9 +184,9 @@ def test():
                 players[_i].u_sa = cPickle.load(f)
             with open('pi{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
                 players[_i].average_strategy = cPickle.load(f)
-            players[_i].test = True
-            players[_i].exploration = False
-            print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
+            players[_i].test = False
+            players[_i].exploration = True
+            # print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
         players[1].test = False
         players[1].exploration = False
         total_r = np.zeros(_num_players)
@@ -201,6 +207,8 @@ def test():
                         _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
                         joint_action[_pid] = _ac
                     done, r, n_state = world.step(joint_action)
+                    # if done:
+                    #     print(world.dead_in_this_step, world.time_step, ob, prev_j_ac, players[0].ammo, n_state, joint_action, players[1].ammo)
                     prev_j_ac = copy(joint_action)
                     ob = n_state
                     for _pid, _ac in enumerate(joint_action):
@@ -231,8 +239,8 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
-    train()
-    # test()
+    # train()
+    test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:
     #     players[0].average_strategy = cPickle.load(f)
