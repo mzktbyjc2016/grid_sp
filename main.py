@@ -16,7 +16,9 @@ import random
 from copy import *
 from agent import *
 import cPickle
-from multiprocessing import Process, Lock, Queue, Pool
+from multiprocessing import Process, Lock, Pool
+from threading import Thread
+from Queue import Queue
 import argparse, os, gc
 
 
@@ -38,10 +40,16 @@ with open('config.cfg', 'rw') as cfgfile:
 
 
 def one_hot(_index, dim):
-    return np.eye(dim)[np.reshape(_index, -1)]
+    _tmp = [0]*dim
+    _tmp[_index] = 1
+    return _tmp
 
 
-def simulation(players, q, _seed, cur_iter):
+def simulation(players_weights, _seed, cur_iter):
+    players = [NRMAgent(i) for i in range(_num_players)]
+    for i in range(_num_players):
+        players[i].update_weights(players_weights[i])
+        # players[i].update_target_weights(players[i].get_weights())
     world = GridRoom(_seed)
     sampled_exp = []
     for _p in range(_num_players):
@@ -80,17 +88,19 @@ def simulation(players, q, _seed, cur_iter):
             #     print(players[_pid].exp_buffer)
             # print(players[_pid].exp_buffer)
             sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
-    q.put(sampled_exp)
+    # print('wtk')
+    print('len of exp', len(sampled_exp[0]), len(sampled_exp[1]))
+    return sampled_exp
 
 
 def update_pi(player, exp, q):
     player.update_policy(exp)
-    q.put([player.u_s, player.u_sa, player.average_strategy])
+    # q.put([player.u_s, player.u_sa, player.average_strategy])
 
 
 def train():
     # world = GridRoom()
-    players = [RMAgent(i) for i in range(_num_players)]
+    players = [NRMAgent(i) for i in range(_num_players)]
     for _i in range(0):
         with open('v{}_3.999.pkl'.format(_i), 'rb') as f:
             players[_i].u_s = cPickle.load(f)
@@ -102,66 +112,79 @@ def train():
     _s_th = args.thread
     # sampled_exp = []
     _save_fre = _train_iter / 10
+    _tmp_weights = []
+    _tmp_iter = []
     for _iteration in range(_train_iter):
         iter_time = time()
         sampled_exp = []
+        players = [NRMAgent(i) for i in range(_num_players)]
         for _p in range(_num_players):
             sampled_exp.append([])
+            if len(_tmp_weights) > 0:
+                players[_p].update_weights(_tmp_weights[_p])
+                players[_p].update_target_weights(_tmp_weights[_p])
+                players[_p]._iter = _tmp_iter[_p]
         _queue_list = []
         _p_list = []
-        _exp = []
-        for _th in range(_s_th):
-            _q = Queue()
-            p = Process(target=simulation, args=(copy(players), _q, None, _iteration+1))
-            p.start()
-            # p.join()
-            _queue_list.append(_q)
-            _p_list.append(p)
+        # sampled_exp = []
+        for _pid in range(_num_players):
+            _tmp_weights.append(players[_pid].get_weights())
+        sampled_exp = simulation(_tmp_weights, None, _iteration+1)
+        # for _th in range(_s_th):
+        #     _q = Queue()
+        #     p = Process(target=simulation, args=(players, None, _iteration+1))
+        #     p.start()
+        #     # p.join()
+        #     _queue_list.append(_q)
+        #     _p_list.append(p)
             # _exp.append(_q.get())
-        for _i_p, _q in enumerate(_queue_list):
-            exp_from_th = _q.get()
-            # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
-            _exp.append(exp_from_th)
+        # for _i_p, _q in enumerate(_queue_list):
+        #     exp_from_th = _q.get()
+        #     # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
+        #     _exp.append(exp_from_th)
             # _p_list[_i_p].join()
-        print(len(_exp[0][0]), len(_exp[1][0]))
+        # print(len(_exp[0][0]), len(_exp[1][0]))
         print('Time for simulation', time()-iter_time)
-        for _th in range(_s_th):
-            for _pid in range(_num_players):
-                sampled_exp[_pid].extend(_exp[_th][_pid])
+        # for _th in range(_s_th):
+        #     for _pid in range(_num_players):
+        #         sampled_exp[_pid].extend(_exp[_th][_pid])
         # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
+        _tmp_weights = []
+        _tmp_iter = []
         update_time = time()
-        update_list = []
-        update_q_list = []
         for _pid in range(_num_players):
-            _q = Queue()
-            p = Process(target=update_pi, args=(copy(players[_pid]), sampled_exp[_pid], _q))
-            p.start()
-            update_list.append(p)
-            update_q_list.append(_q)
-            # players[_pid].update_policy(sampled_exp[_pid])
-        for _i_p, _p in enumerate(update_list):
-            _updated = update_q_list[_i_p].get()
-            players[_i_p].u_s = _updated[0]
-            players[_i_p].u_sa = _updated[1]
-            players[_i_p].average_strategy = _updated[2]
-            _p.join()
+            _t_w = players[_pid].update_policy(sampled_exp[_pid])
+            # _t_w = np.load('weights_{}.npy'.format(_pid))
+            _tmp_weights.append(_t_w)
+            _tmp_iter.append(players[_pid]._iter)
+            print(_pid, 'update done')
+        # update_list = []
+        # update_q_list = []
+        # for _pid in range(_num_players):
+        #     _q = Queue()
+        #     p = Process(target=update_pi, args=(sampled_exp[_pid], _q))
+        #     p.start()
+        #     update_list.append(p)
+        #     update_q_list.append(_q)
+        #     # players[_pid].update_policy(sampled_exp[_pid])
+        # for _i_p, _p in enumerate(update_list):
+        #     # _updated = update_q_list[_i_p].get()
+        # #     players[_i_p].u_s = _updated[0]
+        # #     players[_i_p].u_sa = _updated[1]
+        # #     players[_i_p].average_strategy = _updated[2]
+        #     _p.join()
         print('Update time: %.2f' %(time() - update_time))
-        print('state has seen', len(players[0].u_s), len(players[1].u_s))
         for _pid in range(_num_players):
             players[_pid]._iter += 1
         gc.collect()
         if (_iteration + 1) % 100 == 0:
             print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
         if (_iteration + 1) % _save_fre == 0:
+            print('done')
             for _pid in range(_num_players):
-                with open('v{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[_pid].u_s, f, 2)
-                with open('q{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[_pid].u_sa, f, 2)
-                with open('pi{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
-                    cPickle.dump(players[_pid].average_strategy, f, 2)
+                np.save('weights_{}.npy'.format(_pid), _tmp_weights[_pid])
     print('Time eplapsed: %.2f' % (time() - begin))
 
 
@@ -239,7 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
-    # train()
+    train()
     test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:

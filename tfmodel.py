@@ -19,10 +19,9 @@ class Model(object):
 
     def create_model(self, session, input_dim, out_dim, action_dim):
         with self.graph.as_default():
-        # if 1:
             if type(input_dim) is int:
                 input_dim = [input_dim]
-            h_input = tf.placeholder(tf.float32, shape=[None] + input_dim)
+            h_input = tf.placeholder(tf.float32, shape=[None] + input_dim, name='h_input')
             with tf.variable_scope('pi'):
                 dense1 = tf.layers.dense(h_input, 128,
                                          activation=tf.nn.leaky_relu,
@@ -58,6 +57,12 @@ class Model(object):
                 t_dense2 = tf.layers.dense(t_dense1, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
 
                 t_out = tf.layers.dense(t_dense2, out_dim, use_bias=True, activation=None, name='out')
+            pi_weights_v = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'pi')
+            pi_update_placeholder = []
+            pi_update_op = []
+            for i, _ in enumerate(pi_weights_v):
+                pi_update_placeholder.append(tf.placeholder(_.dtype, shape=_.get_shape()))
+                pi_update_op.append(_.assign(pi_update_placeholder[i]))
             a = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'target')
             update_placeholder = []
             update_op = []
@@ -65,6 +70,16 @@ class Model(object):
                 update_placeholder.append(tf.placeholder(_.dtype, shape=_.get_shape()))
                 update_op.append(_.assign(update_placeholder[i]))
             session.run(tf.global_variables_initializer())
+
+        def update_params(weights):
+            try:
+                for k, __ in enumerate(pi_update_op):
+                    session.run(__, feed_dict={pi_update_placeholder[k]: weights[k]})
+            except IndexError:
+                print(len(weights), len(pi_update_op))
+
+        def get_weights():
+            return session.run(pi_weights_v)
 
         def update_target_params(weights):
             try:
@@ -74,7 +89,7 @@ class Model(object):
                 print(len(weights), len(update_op))
 
         def get_average_policy(state):
-            session.run(action_prob, feed_dict={h_input: state})
+            return session.run(action_prob, feed_dict={h_input: state})[0]
 
         def get_behaviorial_policy(state):
             tmp_state = np.reshape(state, [1] + input_dim)
@@ -85,7 +100,16 @@ class Model(object):
             else:
                 return np.true_divide([1.0] * action_dim, action_dim)
 
-        return out, t_out,  get_average_policy, get_behaviorial_policy, update_target_params
+        def get_cumulative_return(state):
+            """
+            This is used to get the T-1 iteration expected cumulative return
+            :param state: a extended state with raw pixel (already in range [0, 1]) and extra game info
+            :return: T-1 expected cumulative return
+            """
+            total_cu_re = session.run(qv_value, feed_dict={h_input: state})
+            return total_cu_re
+
+        return out, t_out, h_input, get_weights, update_params, get_average_policy, get_behaviorial_policy, update_target_params, get_cumulative_return
     #
     # def create_target_model(self, input_dim, out_dim, action_dim):
     #     # with self.graph.as_default():
