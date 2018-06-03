@@ -16,10 +16,11 @@ import random
 from copy import *
 from agent import *
 import cPickle
-from multiprocessing import Process, Lock, Pool
-from threading import Thread
-from Queue import Queue
+# from multiprocessing import Process, Lock, Pool, Queue
+import subprocess32 as subprocess
+import shlex
 import argparse, os, gc
+# from simulation import simulation
 
 
 args = None
@@ -45,52 +46,52 @@ def one_hot(_index, dim):
     return _tmp
 
 
-def simulation(players_weights, _seed, cur_iter):
-    players = [NRMAgent(i) for i in range(_num_players)]
-    for i in range(_num_players):
-        players[i].update_weights(players_weights[i])
-        # players[i].update_target_weights(players[i].get_weights())
-    world = GridRoom(_seed)
-    sampled_exp = []
-    for _p in range(_num_players):
-        sampled_exp.append([])
-    for _i in range(args.sample_iter):
-        for _pid in range(_num_players):
-            if cur_iter < 2:
-                players[_pid].exploration = True
-            players[_pid].set_ammo(_ammo)
-            players[_pid].exp_buffer = []
-        ob = world.cur_state()
-        done = False
-        prev_j_ac = [9] * _num_players
-        while not done:
-            joint_action = [9] * _num_players
-            for _pid in world.alive_players:
-                _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
-                joint_action[_pid] = _ac
-            done, r, n_state = world.step(joint_action)
-            for _pid in world.alive_players:
-                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
-            for _pid in world.dead_in_this_step:
-                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
-            for _pid, _ac in enumerate(joint_action):
-                if _ac == 0:
-                    players[_pid].set_ammo(players[_pid].ammo-1)
-            prev_j_ac = copy(joint_action)
-            ob = n_state
-        world.reset()
-        for _pid in range(_num_players):  # TODO : replace with player 1
-            v = 0
-            for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
-                players[_pid].exp_buffer[_k][2] += _gamma * v
-                v = players[_pid].exp_buffer[_k][2]
-            # if v < 0:
-            #     print(players[_pid].exp_buffer)
-            # print(players[_pid].exp_buffer)
-            sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
-    # print('wtk')
-    print('len of exp', len(sampled_exp[0]), len(sampled_exp[1]))
-    return sampled_exp
+# def simulation(players_weights, _seed, cur_iter):
+#     players = [NRMAgent(i) for i in range(_num_players)]
+#     for i in range(_num_players):
+#         players[i].update_weights(players_weights[i])
+#         # players[i].update_target_weights(players[i].get_weights())
+#     world = GridRoom(_seed)
+#     sampled_exp = []
+#     for _p in range(_num_players):
+#         sampled_exp.append([])
+#     for _i in range(args.sample_iter):
+#         for _pid in range(_num_players):
+#             if cur_iter < 2:
+#                 players[_pid].exploration = True
+#             players[_pid].set_ammo(_ammo)
+#             players[_pid].exp_buffer = []
+#         ob = world.cur_state()
+#         done = False
+#         prev_j_ac = [9] * _num_players
+#         while not done:
+#             joint_action = [9] * _num_players
+#             for _pid in world.alive_players:
+#                 _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
+#                 joint_action[_pid] = _ac
+#             done, r, n_state = world.step(joint_action)
+#             for _pid in world.alive_players:
+#                 players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
+#             for _pid in world.dead_in_this_step:
+#                 players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
+#             for _pid, _ac in enumerate(joint_action):
+#                 if _ac == 0:
+#                     players[_pid].set_ammo(players[_pid].ammo-1)
+#             prev_j_ac = copy(joint_action)
+#             ob = n_state
+#         world.reset()
+#         for _pid in range(_num_players):  # TODO : replace with player 1
+#             v = 0
+#             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
+#                 players[_pid].exp_buffer[_k][2] += _gamma * v
+#                 v = players[_pid].exp_buffer[_k][2]
+#             # if v < 0:
+#             #     print(players[_pid].exp_buffer)
+#             # print(players[_pid].exp_buffer)
+#             sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
+#     # print('wtk')
+#     print('len of exp', len(sampled_exp[0]), len(sampled_exp[1]))
+#     return sampled_exp
 
 
 def update_pi(player, exp, q):
@@ -129,25 +130,22 @@ def train():
         # sampled_exp = []
         for _pid in range(_num_players):
             _tmp_weights.append(players[_pid].get_weights())
-        sampled_exp = simulation(_tmp_weights, None, _iteration+1)
-        # for _th in range(_s_th):
-        #     _q = Queue()
-        #     p = Process(target=simulation, args=(players, None, _iteration+1))
-        #     p.start()
-        #     # p.join()
-        #     _queue_list.append(_q)
-        #     _p_list.append(p)
-            # _exp.append(_q.get())
-        # for _i_p, _q in enumerate(_queue_list):
-        #     exp_from_th = _q.get()
-        #     # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
-        #     _exp.append(exp_from_th)
-            # _p_list[_i_p].join()
-        # print(len(_exp[0][0]), len(_exp[1][0]))
+        # sampled_exp = simulation(_tmp_weights, None, _iteration+1)
+        thread_list = []
+        ret_code = []
+        _exp = []
+        for _th in range(_s_th):
+            thread_list.append(subprocess.Popen(shlex.split('python simulation.py -th {} -si {} -cur_it {}'.format(_th, args.sample_iter, _iteration+1)), stdout=open('res', 'wb+'), stderr=subprocess.STDOUT))
+        for _i_th in range(len(thread_list)):
+            ret = thread_list[_i_th].wait(timeout=500)
+            ret_code.append(ret)
+        for _i_th in range(_s_th):
+            with open('episodes/{}.pkl'.format(_i_th), 'rb') as ef:
+                _exp.append(cPickle.load(ef))
         print('Time for simulation', time()-iter_time)
-        # for _th in range(_s_th):
-        #     for _pid in range(_num_players):
-        #         sampled_exp[_pid].extend(_exp[_th][_pid])
+        for _th in range(_s_th):
+            for _pid in range(_num_players):
+                sampled_exp[_pid].extend(_exp[_th][_pid])
         # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
         print('Episode time: %.2f' % (time() - iter_time))
         # end sample
@@ -262,6 +260,8 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
     args = parser.parse_args()
     # print(args.thread, args.sample_iter)
+    if not os.path.exists('episodes'):
+        os.mkdir('episodes')
     train()
     test()
     # players = [RMAgent(i) for i in range(_num_players)]

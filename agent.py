@@ -12,7 +12,6 @@ import numpy as np
 from tfmodel import *
 import ConfigParser
 from time import *
-import tensorflow as tf
 import logging
 import os
 
@@ -307,6 +306,8 @@ class NRMAgent(RMAgent):
         ID(1)+ (one hot pos (N+M) + one hots dir (4))* # of players+ ammo(1, [0,1] float)*# of repetition + one hot prev_joint_action (# of players*5)
         (10+N+M)* # of players + repetition
     """
+
+    import tensorflow as tf
 
     def __init__(self, player_id=0):
         super(NRMAgent, self).__init__(player_id)
