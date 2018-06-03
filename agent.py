@@ -519,7 +519,7 @@ class NRMAgent(RMAgent):
                 # with open('mgb_{}_{}.log'.format(num_gpus, batch_size), 'a+') as rlfile:
                 #     rlfile.write('%.2f min\n' % ((time.time() - begin) / 60.0))
                 t_weights = self.get_weights()
-                # np.save('weights_{}.npy'.format(self.id), self.get_weights())
+                np.save('weights_{}.npy'.format(self.id), self.get_weights())
                 with open('traintime.log', 'a+') as runlogfile:
                     runlogfile.write('total time elapsed: %.2f min\n' % ((time() - begin) / 60.0))
                 with open('global_step{}'.format(self.id), 'wb+') as global_step_f:

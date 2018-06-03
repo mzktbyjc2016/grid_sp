@@ -46,8 +46,9 @@ args = parser.parse_args()
 def simulation(_seed, cur_iter):
     players = [NRMAgent(i) for i in range(_num_players)]
     for i in range(_num_players):
-        tmp_weights = np.load('weights_{}.npy'.format(i))
-        players[i].update_weights(tmp_weights)
+        if os.path.exists('weights_{}.npy'.format(i)):
+            tmp_weights = np.load('weights_{}.npy'.format(i))
+            players[i].update_weights(tmp_weights)
         # players[i].update_target_weights(players[i].get_weights())
     world = GridRoom(_seed)
     sampled_exp = []
