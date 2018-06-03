@@ -182,7 +182,7 @@ def train():
         if (_iteration + 1) % _save_fre == 0:
             print('done')
             for _pid in range(_num_players):
-                np.save('weights_{}.npy'.format(_pid), _tmp_weights[_pid])
+                np.save('model/weights_{}_{}.npy'.format(_pid, (_iteration+1)/_save_fre), _tmp_weights[_pid])
     print('Time eplapsed: %.2f' % (time() - begin))
 
 
@@ -262,6 +262,8 @@ if __name__ == '__main__':
     # print(args.thread, args.sample_iter)
     if not os.path.exists('episodes'):
         os.mkdir('episodes')
+    if not os.path.exists('model'):
+        os.mkdir('model')
     train()
     test()
     # players = [RMAgent(i) for i in range(_num_players)]

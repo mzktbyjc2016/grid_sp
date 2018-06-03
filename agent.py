@@ -19,7 +19,9 @@ import os
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
+#os.environ['CUDA_VISIBLE_DEVICES']=''
+gpu_options = tf.GPUOptions(allow_growth=True)
+gpu_config = tf.ConfigProto(gpu_options=gpu_options)
 config = ConfigParser.ConfigParser()
 with open('config.cfg', 'rw') as cfgfile:
     config.readfp(cfgfile)
@@ -312,6 +314,7 @@ class NRMAgent(RMAgent):
     def __init__(self, player_id=0):
         super(NRMAgent, self).__init__(player_id)
         # TODO overload policy and value function
+        os.environ['CUDA_VISIBLE_DEVICES']=''
         self.graph = tf.Graph()
         self.session = tf.Session(graph=self.graph)
         model = Model(self.graph)
@@ -353,7 +356,7 @@ class NRMAgent(RMAgent):
         batch_size = _batch_size
         n_epochs = _num_epochs
 
-        lr = 1e-4
+        lr = 1e-2
         num_gpus = _num_gpu
         logdir = 'save'+'/'+str(self.id)
         c1 = 0.5
@@ -362,6 +365,7 @@ class NRMAgent(RMAgent):
         opt = tf.train.GradientDescentOptimizer(lr)
         tower_grads = []
         tower_vars = []
+        os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
         no_gpu = not is_gpu_available()
         if no_gpu:
             num_gpus = 1
@@ -467,10 +471,10 @@ class NRMAgent(RMAgent):
         # with self.session as sess, sess.as_default():
             self.session.run(tf.global_variables_initializer())
             begin = time()
-            if not os.path.exists('global_step'):
+            if not os.path.exists('global_step{}'.format(self.id)):
                 step = 0
             else:
-                with open('global_step', 'rb') as gs_f:
+                with open('global_step{}'.format(self.id), 'rb') as gs_f:
                     step = int(gs_f.read())
                     print(step)
             try:
@@ -496,7 +500,7 @@ class NRMAgent(RMAgent):
                         _t_f[tower_holders[_k][3]] = np.true_divide((self._iter - 1) * _feed_qv[_k][:, 0:5] + _action_taken * _g.repeat(5, axis=1),
                                                                     self._iter)  # to fit ( T-1 iter + this iter )/(T-1). np.eye(C)[index] return one_hot array of index
                     # logger.info('Time for fetch and feed dict Step %d: %.5f sec a step' % (step+1, time.time()-start_time))
-                    if (step + 1) % 20 == 0:
+                    if (step + 1) % 500 == 0:
                         # start_time = time.time()
                         _, summary = sess.run([train_op, summary_op], feed_dict=_t_f)
                         writer.add_summary(summary, step)
@@ -518,7 +522,7 @@ class NRMAgent(RMAgent):
                 # np.save('weights_{}.npy'.format(self.id), self.get_weights())
                 with open('traintime.log', 'a+') as runlogfile:
                     runlogfile.write('total time elapsed: %.2f min\n' % ((time() - begin) / 60.0))
-                with open('global_step', 'wb+') as global_step_f:
+                with open('global_step{}'.format(self.id), 'wb+') as global_step_f:
                     global_step_f.write(str(step))
             finally:
                 print('Training Done')
