@@ -339,7 +339,10 @@ class NRMAgent(RMAgent):
     def action(self, state, action_space):
         one_hot_state = self.parse_state(state)
         s = one_hot(self.id, _num_players) + one_hot_state + [self.ammo / float(_ammo)] * 3
-        prob = self.behavior_pi(s)
+        if not self.test:
+            prob = self.behavior_pi(s)
+        else:
+            prob = self.average_strategy(s)
         if len(action_space) > 4:
             return np.random.choice(action_space, p=prob)
         else:

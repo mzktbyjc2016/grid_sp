@@ -188,23 +188,21 @@ def train():
 
 def test():
     world = GridRoom()
-    players = [NRMAgent(i) for i in range(_num_players)]
+    players = [RandomAgent(i) for i in range(_num_players)]
+    players[0] = NRMAgent(0)
+    # players[0] = NRMAgent(0)
+    # players[0] = NRMAgent(0)
     # players.append(RandomAgent(1))
     # players[0] = ShootingAgent(0)
     # players[1] = ShootingAgent1(1)
-    for _k in range(1, 2):
+    for _k in range(1, 11):
         players[0].seen = 0
         players[0].unseen = 0
         players[1].seen = 0
         players[1].unseen = 0
-        for _i in range(_num_players-_num_players):
+        for _i in range(_num_players-2):
             begin = time()
-            with open('v{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
-                players[_i].u_s = cPickle.load(f)
-            with open('q{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
-                players[_i].u_sa = cPickle.load(f)
-            with open('pi{}_{}.0.pkl'.format(_i, _k), 'rb') as f:
-                players[_i].average_strategy = cPickle.load(f)
+            players[_i].update_weights(np.load('model/weights_{}_{}.0.npy'.format(_i, _k)))
             players[_i].test = False
             players[_i].exploration = True
             # print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
@@ -241,17 +239,6 @@ def test():
             # print('Episode time: %.2f' % (time() - begin))
         print('Time eplapsed: %.2f min' % ((time() - begin)/60.0))
         print(total_r)
-        for _pid in range(_num_players):
-            print('unseen, seen, average step', players[_pid].unseen, players[_pid].seen, step/_test_iter)
-        # for _key, _item in players[0].u_s.iteritems():
-        #     print(_key, _item)
-        # print('------------')
-        # for _key, _item in players[0].u_sa.iteritems():
-        #     print(_key, _item)
-        # print('------------')
-        # for _k, _i in players[0].average_strategy.iteritems():
-        #     if _i.count(0) < _i.__len__()-1:
-        #         print(_k, _i)
 
 
 if __name__ == '__main__':
