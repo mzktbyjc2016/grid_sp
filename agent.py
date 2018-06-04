@@ -19,9 +19,10 @@ import os
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-#os.environ['CUDA_VISIBLE_DEVICES']=''
+#os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
 gpu_options = tf.GPUOptions(allow_growth=True)
 gpu_config = tf.ConfigProto(gpu_options=gpu_options)
+#os.environ['CUDA_VISIBLE_DEVICES']=''
 config = ConfigParser.ConfigParser()
 with open('config.cfg', 'rw') as cfgfile:
     config.readfp(cfgfile)
@@ -311,12 +312,15 @@ class NRMAgent(RMAgent):
 
     import tensorflow as tf
 
-    def __init__(self, player_id=0):
+    def __init__(self, player_id=0, simulation=False):
         super(NRMAgent, self).__init__(player_id)
         # TODO overload policy and value function
-        os.environ['CUDA_VISIBLE_DEVICES']=''
+        if not simulation:
+            os.environ['CUDA_VISIBLE_DEVICES']='0,1,2'
+        else:
+            os.environ['CUDA_VISIBLE_DEVICES']=''
         self.graph = tf.Graph()
-        self.session = tf.Session(graph=self.graph)
+        self.session = tf.Session(graph=self.graph, config=gpu_config)
         model = Model(self.graph)
         self.out, self.t_out, self.h_state, self.get_weights, self.update_weights, self.average_strategy, self.behavior_pi, self.update_target_weights, self.get_cu_re = \
             model.create_model(self.session, input_dim=(10 + _height + _width) * _num_players + 3, out_dim=11, action_dim=5)
@@ -365,7 +369,7 @@ class NRMAgent(RMAgent):
         opt = tf.train.GradientDescentOptimizer(lr)
         tower_grads = []
         tower_vars = []
-        os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
+        #os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
         no_gpu = not is_gpu_available()
         if no_gpu:
             num_gpus = 1
@@ -471,12 +475,12 @@ class NRMAgent(RMAgent):
         # with self.session as sess, sess.as_default():
             self.session.run(tf.global_variables_initializer())
             begin = time()
+            step = 0
             if not os.path.exists('global_step{}'.format(self.id)):
-                step = 0
+                shift_step = 0
             else:
                 with open('global_step{}'.format(self.id), 'rb') as gs_f:
-                    step = int(gs_f.read())
-                    print(step)
+                    shift_step = int(gs_f.read())
             try:
                 one_element = iterator.get_next()
                 while True:
@@ -500,12 +504,13 @@ class NRMAgent(RMAgent):
                         _t_f[tower_holders[_k][3]] = np.true_divide((self._iter - 1) * _feed_qv[_k][:, 0:5] + _action_taken * _g.repeat(5, axis=1),
                                                                     self._iter)  # to fit ( T-1 iter + this iter )/(T-1). np.eye(C)[index] return one_hot array of index
                     # logger.info('Time for fetch and feed dict Step %d: %.5f sec a step' % (step+1, time.time()-start_time))
-                    if (step + 1) % 500 == 0:
+                    if (step + 1) % 100 == 0:
                         # start_time = time.time()
                         _, summary = sess.run([train_op, summary_op], feed_dict=_t_f)
-                        writer.add_summary(summary, step)
+                        writer.add_summary(summary, shift_step+step)
                         duration = time() - start_time
-                        logger.info('Step %d: %.5f sec a step' % (step + 1, duration))
+                        if (step+1) % 500 == 0:
+                            logger.info('Step %d: %.5f sec a step' % (step + 1, duration))
                     else:
                         _ = sess.run([train_op], feed_dict=_t_f)
                     step += 1
@@ -523,7 +528,7 @@ class NRMAgent(RMAgent):
                 with open('traintime.log', 'a+') as runlogfile:
                     runlogfile.write('total time elapsed: %.2f min\n' % ((time() - begin) / 60.0))
                 with open('global_step{}'.format(self.id), 'wb+') as global_step_f:
-                    global_step_f.write(str(step))
+                    global_step_f.write(str(step+shift_step))
             finally:
                 print('Training Done')
         return t_weights

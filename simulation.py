@@ -44,7 +44,7 @@ args = parser.parse_args()
 
 
 def simulation(_seed, cur_iter):
-    players = [NRMAgent(i) for i in range(_num_players)]
+    players = [NRMAgent(i, True) for i in range(_num_players)]
     for i in range(_num_players):
         if os.path.exists('weights_{}.npy'.format(i)):
             tmp_weights = np.load('weights_{}.npy'.format(i))
