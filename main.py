@@ -189,7 +189,7 @@ def train():
 def test():
     world = GridRoom()
     players = [RandomAgent(i) for i in range(_num_players)]
-    players[0] = NRMAgent(0)
+    players[1] = NRMAgent(1)
     # players[0] = NRMAgent(0)
     # players[0] = NRMAgent(0)
     # players.append(RandomAgent(1))
@@ -200,14 +200,14 @@ def test():
         players[0].unseen = 0
         players[1].seen = 0
         players[1].unseen = 0
-        for _i in range(_num_players-2):
+        for _i in range(1, _num_players-1):
             begin = time()
             players[_i].update_weights(np.load('model/weights_{}_{}.0.npy'.format(_i, _k)))
-            players[_i].test = False
+            players[_i].test = True
             players[_i].exploration = True
             # print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
-        players[1].test = False
-        players[1].exploration = False
+        # players[1].test = True
+        # players[1].exploration = False
         total_r = np.zeros(_num_players)
         begin = time()
         # sampled_exp = []
@@ -251,7 +251,7 @@ if __name__ == '__main__':
         os.mkdir('episodes')
     if not os.path.exists('model'):
         os.mkdir('model')
-    train()
+    # train()
     test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:

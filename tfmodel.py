@@ -89,7 +89,8 @@ class Model(object):
                 print(len(weights), len(update_op))
 
         def get_average_policy(state):
-            return session.run(action_prob, feed_dict={h_input: state})[0]
+            tmp_state = np.reshape(state, [1] + input_dim)
+            return session.run(action_prob, feed_dict={h_input: tmp_state})[0]
 
         def get_behaviorial_policy(state):
             tmp_state = np.reshape(state, [1] + input_dim)
