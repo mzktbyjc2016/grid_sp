@@ -139,9 +139,10 @@ class GridRoom(object):
                 self.dead_in_this_step.append(player_id)
                 # print('{} is killed by {}'.format(player_id, _id))
         self.alive_players = [k for k in range(_num_players) if k not in self.dead_players]
-        if len(self.alive_players) == 1:
+        if len(self.alive_players) <= 1:
             is_terminal = True
-            reward[self.alive_players[0]] += self.r_only_alive
+            if len(self.alive_players) == 1:
+                reward[self.alive_players[0]] += self.r_only_alive
 
         self.fire_pos_dir = [[]] * _num_players
         for _id in fired_players:
