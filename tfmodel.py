@@ -110,36 +110,78 @@ class Model(object):
             return total_cu_re
 
         return out, t_out, h_input, get_weights, update_params, get_average_policy, get_behaviorial_policy, update_target_params, get_cumulative_return
-    #
-    # def create_target_model(self, input_dim, out_dim, action_dim):
-    #     # with self.graph.as_default():
-    #     if 1:
-    #         if type(input_dim) is int:
-    #             input_dim = [input_dim]
-    #         h_input = tf.placeholder(tf.float32, shape=[None] + input_dim)
-    #         with tf.variable_scope('target'):
-    #             dense1 = tf.layers.dense(h_input, 128,
-    #                                      activation=tf.nn.leaky_relu,
-    #                                      use_bias=True,
-    #                                      kernel_initializer=None,
-    #                                      bias_initializer=None,
-    #                                      kernel_regularizer=None,
-    #                                      bias_regularizer=None,
-    #                                      activity_regularizer=None,
-    #                                      trainable=True,
-    #                                      name='dense1', )
-    #             dense2 = tf.layers.dense(dense1, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
-    #
-    #             out = tf.layers.dense(dense2, out_dim, use_bias=True, activation=None, name='out')
-    #         a = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'target')
-    #         update_placeholder = []
-    #         update_op = []
-    #         for i, _ in enumerate(a):
-    #             update_placeholder.append(tf.placeholder(_.dtype, shape=_.get_shape()))
-    #             update_op.append(_.assign(update_placeholder[i]))
-    #
-    #     def update_target_params(session, weights):
-    #         for k, __ in enumerate(update_op):
-    #             session.run(__, feed_dict={update_placeholder[k]: weights[k]})
-    #
-    #     return out, update_target_params
+
+
+def build_training_model(h_input, out_dim, action_dim):
+    with tf.variable_scope('pi'):
+        dense1 = tf.layers.dense(h_input, 128,
+                                 activation=tf.nn.leaky_relu,
+                                 use_bias=True,
+                                 kernel_initializer=None,
+                                 bias_initializer=None,
+                                 kernel_regularizer=None,
+                                 bias_regularizer=None,
+                                 activity_regularizer=None,
+                                 trainable=True,
+                                 name='dense1', )
+        dense2 = tf.layers.dense(dense1, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
+
+        out = tf.layers.dense(dense2, out_dim, use_bias=True, activation=None, name='out')
+
+    qv_value = out[:, action_dim: 2*action_dim+1]
+
+    with tf.variable_scope('target'):
+        t_dense1 = tf.layers.dense(h_input, 128,
+                                 activation=tf.nn.leaky_relu,
+                                 use_bias=True,
+                                 kernel_initializer=None,
+                                 bias_initializer=None,
+                                 kernel_regularizer=None,
+                                 bias_regularizer=None,
+                                 activity_regularizer=None,
+                                 trainable=True,
+                                 name='dense1', )
+        t_dense2 = tf.layers.dense(t_dense1, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
+
+        t_out = tf.layers.dense(t_dense2, out_dim, use_bias=True, activation=None, name='out')
+    pi_weights_v = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'pi')
+    pi_update_placeholder = []
+    pi_update_op = []
+    for i, _ in enumerate(pi_weights_v):
+        pi_update_placeholder.append(tf.placeholder(_.dtype, shape=_.get_shape()))
+        pi_update_op.append(_.assign(pi_update_placeholder[i]))
+    a = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'target')
+    update_placeholder = []
+    update_op = []
+    for i, _ in enumerate(a):
+        update_placeholder.append(tf.placeholder(_.dtype, shape=_.get_shape()))
+        update_op.append(_.assign(update_placeholder[i]))
+
+    def update_params(session, weights):
+        try:
+            for k, __ in enumerate(pi_update_op):
+                session.run(__, feed_dict={pi_update_placeholder[k]: weights[k]})
+        except IndexError:
+            print(len(weights), len(pi_update_op))
+
+    def update_target_params(session, weights):
+        try:
+            for k, __ in enumerate(update_op):
+                session.run(__, feed_dict={update_placeholder[k]: weights[k]})
+        except IndexError:
+            print(len(weights), len(update_op))
+
+    def get_weights(session):
+        return session.run(pi_weights_v)
+
+    def get_cumulative_return(session, state):
+        """
+        This is used to get the T-1 iteration expected cumulative return
+        :param session: tf session
+        :param state: a extended state with raw pixel (already in range [0, 1]) and extra game info
+        :return: T-1 expected cumulative return
+        """
+        total_cu_re = session.run(qv_value, feed_dict={h_input: state})
+        return total_cu_re
+
+    return out, t_out, h_input, update_params, update_target_params, get_weights

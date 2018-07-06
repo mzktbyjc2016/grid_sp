@@ -18,6 +18,7 @@ from copy import *
 from agent import *
 import cPickle
 import argparse, os, gc
+import tensorflow as tf
 
 
 # args = None
@@ -43,15 +44,31 @@ parser.add_argument('-cur_it', dest='cur_iter', default=1, type=int, help='curre
 args = parser.parse_args()
 
 
+def _bytes_feature(value):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+
+def _float_feature(value):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
+def _int_feature(value):
+    return tf.train.Feature(int_list=tf.train.Int64List(value=value))
+
+
 def simulation(_seed, cur_iter):
     players = [NRMAgent(i, True) for i in range(_num_players)]
     for i in range(_num_players):
-        if os.path.exists('weights_{}.npy'.format(i)):
-            tmp_weights = np.load('weights_{}.npy'.format(i))
-            players[i].update_weights(tmp_weights)
+        if i == 0:
+            if os.path.exists('weights_{}.npy'.format(0)):
+                tmp_weights = np.load('weights_{}.npy'.format(0))
+                players[i].update_weights(tmp_weights)
+        else:
+            players[i].update_weights(players[0].get_weights())
         # players[i].update_target_weights(players[i].get_weights())
     world = GridRoom(_seed)
     sampled_exp = []
+    ir_list = np.load('index/{}.npy'.format(args.thread))
     for _p in range(_num_players):
         sampled_exp.append([])
     for _i in range(args.sample_iter):
@@ -79,20 +96,33 @@ def simulation(_seed, cur_iter):
             prev_j_ac = copy(joint_action)
             ob = n_state
         world.reset()
-        for _pid in range(_num_players):  # TODO : replace with player 1
+        for _pid in range(_num_players):
+            print('write player')
+            train_writer = tf.python_io.TFRecordWriter('episodes/{}.tfrecords'.format(ir_list[_i*_num_players+_pid]))
             v = 0
             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
+                _item = players[_pid].exp_buffer[_k]
                 players[_pid].exp_buffer[_k][2] += _gamma * v
                 v = players[_pid].exp_buffer[_k][2]
+                one_hot_s = players[_pid].parse_state([_item[0][1], _item[0][3]])
+                full_state = one_hot_s + [_item[0][2] / float(_ammo)] * 3
+                b_feature = {'State': _float_feature(full_state),
+                             'Return': _float_feature([v]),
+                             'Act': _float_feature([_item[1]]), 'Act_prob': _float_feature([1.0])}
+                example = tf.train.Example(features=tf.train.Features(feature=b_feature))
+                train_writer.write(example.SerializeToString())
+            train_writer.close()
             # if v < 0:
             #     print(players[_pid].exp_buffer)
             # print(players[_pid].exp_buffer)
-            sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
+            # sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
     # print('wtk')
     # print('len of exp', len(sampled_exp[0]), len(sampled_exp[1]))
-    with open('episodes/{}.pkl'.format(args.thread), 'wb') as ef:
-        cPickle.dump(sampled_exp, ef, 2)
+    # with open('episodes/{}.pkl'.format(args.thread), 'wb') as ef:
+    #     cPickle.dump(sampled_exp, ef, 2)
 
 
 # print(args.thread, args.sample_iter, args.cur_iter)
+begin = time()
 simulation(None, args.cur_iter)
+print('time elapsed: ', time() - begin)

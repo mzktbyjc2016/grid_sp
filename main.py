@@ -20,6 +20,7 @@ import cPickle
 import subprocess32 as subprocess
 import shlex
 import argparse, os, gc
+from multiprocessing import cpu_count
 # from simulation import simulation
 
 
@@ -34,64 +35,18 @@ with open('config.cfg', 'rw') as cfgfile:
     _max_step = int(config.get('environ', 'Max_Step'))
     _gamma = float(config.get('environ', 'Gamma'))
     _train_iter = int(config.get('algorithm', 'train_iter'))
-    _sample_iter = int(config.get('algorithm', 'sample_iter'))
+    # _sample_iter = int(config.get('algorithm', 'sample_iter'))
     _test_iter = int(config.get('algorithm', 'test_iter'))
     # _s_th = int(config.get('algorithm', 'simulation_thread'))
     _frame_stack = int(config.get('environ', 'Frame_stack'))
+    _max_epi = int(config.get('algorithm', 'max_num_episodes'))
+    _trunc_prob = float(config.get('algorithm', 'truncated_prob'))
 
 
 def one_hot(_index, dim):
     _tmp = [0]*dim
     _tmp[_index] = 1
     return _tmp
-
-
-# def simulation(players_weights, _seed, cur_iter):
-#     players = [NRMAgent(i) for i in range(_num_players)]
-#     for i in range(_num_players):
-#         players[i].update_weights(players_weights[i])
-#         # players[i].update_target_weights(players[i].get_weights())
-#     world = GridRoom(_seed)
-#     sampled_exp = []
-#     for _p in range(_num_players):
-#         sampled_exp.append([])
-#     for _i in range(args.sample_iter):
-#         for _pid in range(_num_players):
-#             if cur_iter < 2:
-#                 players[_pid].exploration = True
-#             players[_pid].set_ammo(_ammo)
-#             players[_pid].exp_buffer = []
-#         ob = world.cur_state()
-#         done = False
-#         prev_j_ac = [9] * _num_players
-#         while not done:
-#             joint_action = [9] * _num_players
-#             for _pid in world.alive_players:
-#                 _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
-#                 joint_action[_pid] = _ac
-#             done, r, n_state = world.step(joint_action)
-#             for _pid in world.alive_players:
-#                 players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
-#             for _pid in world.dead_in_this_step:
-#                 players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
-#             for _pid, _ac in enumerate(joint_action):
-#                 if _ac == 0:
-#                     players[_pid].set_ammo(players[_pid].ammo-1)
-#             prev_j_ac = copy(joint_action)
-#             ob = n_state
-#         world.reset()
-#         for _pid in range(_num_players):  # TODO : replace with player 1
-#             v = 0
-#             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
-#                 players[_pid].exp_buffer[_k][2] += _gamma * v
-#                 v = players[_pid].exp_buffer[_k][2]
-#             # if v < 0:
-#             #     print(players[_pid].exp_buffer)
-#             # print(players[_pid].exp_buffer)
-#             sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
-#     # print('wtk')
-#     print('len of exp', len(sampled_exp[0]), len(sampled_exp[1]))
-#     return sampled_exp
 
 
 def update_pi(player, exp, q):
@@ -102,87 +57,78 @@ def update_pi(player, exp, q):
 def train():
     # world = GridRoom()
     players = [NRMAgent(i) for i in range(_num_players)]
-    for _i in range(0):
-        with open('v{}_3.999.pkl'.format(_i), 'rb') as f:
-            players[_i].u_s = cPickle.load(f)
-        with open('q{}_3.999.pkl'.format(_i), 'rb') as f:
-            players[_i].u_sa = cPickle.load(f)
-        with open('pi{}_3.999.pkl'.format(_i), 'rb') as f:
-            players[_i].average_strategy = cPickle.load(f)
     begin = time()
-    _s_th = args.thread
     # sampled_exp = []
     _save_fre = _train_iter / 10
     _tmp_weights = []
-    _tmp_iter = []
+    total_epi = 0
+    if not os.path.exists('index'):
+        os.mkdir('index')
     for _iteration in range(_train_iter):
         iter_time = time()
-        sampled_exp = []
-        players = [NRMAgent(i) for i in range(_num_players)]
-        for _p in range(_num_players):
-            sampled_exp.append([])
-            if len(_tmp_weights) > 0:
-                players[_p].update_weights(_tmp_weights[_p])
-                players[_p].update_target_weights(_tmp_weights[_p])
-                players[_p]._iter = _tmp_iter[_p]
-        _queue_list = []
-        _p_list = []
-        # sampled_exp = []
-        for _pid in range(_num_players):
+        _s_th = min(args.thread, cpu_count())
+        _sample_iter = max(int(_max_epi * 0.1 * max(_trunc_prob, 1.0/max(_iteration-9, 1)) / (_s_th * _num_players)), 1)
+        # players = [NRMAgent(i) for i in range(_num_players)]
+        for _p in range(_num_players):  # share weights
+            if _p == 0:
+                if len(_tmp_weights) > 0:
+                    players[_p].update_weights(_tmp_weights[_p])
+                    players[_p].update_target_weights(_tmp_weights[_p])
+            else:
+                players[_p].update_weights(players[0].get_weights())
+                players[_p].update_target_weights(players[0].get_weights())
+
+        for _pid in range(1):
             _tmp_weights.append(players[_pid].get_weights())
         # sampled_exp = simulation(_tmp_weights, None, _iteration+1)
         thread_list = []
         ret_code = []
-        _exp = []
+        ir_list = []
+        if _sample_iter*_num_players*_s_th + total_epi <= _max_epi:  # assign the corresponding TFRecord index and each simulation thread produces sample_iter*num_players episodes
+            ir_list = np.array(range(total_epi, total_epi+_sample_iter*_num_players*_s_th), dtype=np.int64)
+            for _ in range(_s_th):
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+        elif total_epi < _max_epi:
+            _temp = range(total_epi, _max_epi)
+            _temp.extend(sample(range(total_epi), _s_th*_sample_iter*_num_players + total_epi - _max_epi))
+            ir_list = np.array(_temp, dtype=np.int64)
+            for _ in range(_s_th):
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+        else:  # total episodes exceed the max episodes buffer size
+            ir_list = np.array(sample(range(_max_epi), _s_th * _sample_iter*_num_players), dtype=np.int64)
+            for _ in range(_s_th):
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+
         for _th in range(_s_th):
-            thread_list.append(subprocess.Popen(shlex.split('python simulation.py -th {} -si {} -cur_it {}'.format(_th, args.sample_iter, _iteration+1)), stdout=open('res', 'wb+'), stderr=subprocess.STDOUT))
+            thread_list.append(subprocess.Popen(shlex.split('python simulation.py -th {} -si {} -cur_it {}'.format(_th, _sample_iter, _iteration+1)), stdout=open('res', 'wb+'), stderr=subprocess.STDOUT))
         for _i_th in range(len(thread_list)):
-            ret = thread_list[_i_th].wait(timeout=500)
+            ret = thread_list[_i_th].wait()
             ret_code.append(ret)
-        for _i_th in range(_s_th):
-            with open('episodes/{}.pkl'.format(_i_th), 'rb') as ef:
-                _exp.append(cPickle.load(ef))
-        print('Time for simulation', time()-iter_time)
-        for _th in range(_s_th):
-            for _pid in range(_num_players):
-                sampled_exp[_pid].extend(_exp[_th][_pid])
+        # for _i_th in range(_s_th):
+        #     with open('episodes/{}.pkl'.format(_i_th), 'rb') as ef:
+        #         _exp.append(cPickle.load(ef))
+        # print('Time for simulation', time()-iter_time)
+        total_epi += _s_th*_sample_iter*_num_players
+        print('Total episodes: ', total_epi)
         # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
-        print('Episode time: %.2f' % (time() - iter_time))
+        print('Episode simulation time: %.2f' % (time() - iter_time))
         # end sample
         _tmp_weights = []
         _tmp_iter = []
         update_time = time()
-        for _pid in range(_num_players):
-            _t_w = players[_pid].update_policy(sampled_exp[_pid])
+        for _pid in range(1):
+            print(players[_pid].get_weights()[2][1][0:4])
+            _t_w = players[_pid].update_policy(total_epi)
             # _t_w = np.load('weights_{}.npy'.format(_pid))
             _tmp_weights.append(_t_w)
             _tmp_iter.append(players[_pid]._iter)
-            print(_pid, 'update done')
-        # update_list = []
-        # update_q_list = []
-        # for _pid in range(_num_players):
-        #     _q = Queue()
-        #     p = Process(target=update_pi, args=(sampled_exp[_pid], _q))
-        #     p.start()
-        #     update_list.append(p)
-        #     update_q_list.append(_q)
-        #     # players[_pid].update_policy(sampled_exp[_pid])
-        # for _i_p, _p in enumerate(update_list):
-        #     # _updated = update_q_list[_i_p].get()
-        # #     players[_i_p].u_s = _updated[0]
-        # #     players[_i_p].u_sa = _updated[1]
-        # #     players[_i_p].average_strategy = _updated[2]
-        #     _p.join()
         print('Update time: %.2f' %(time() - update_time))
         for _pid in range(_num_players):
             players[_pid]._iter += 1
         gc.collect()
-        if (_iteration + 1) % 100 == 0:
-            print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
         if (_iteration + 1) % _save_fre == 0:
-            print('done')
-            for _pid in range(_num_players):
-                np.save('model/weights_{}_{}.npy'.format(_pid, (_iteration+1)/_save_fre), _tmp_weights[_pid])
+            for _pid in range(1):
+                np.save('model/weights_{}_{}.npy'.format(_pid, int((_iteration+1)/_save_fre)), _tmp_weights[_pid])
     print('Time eplapsed: %.2f' % (time() - begin))
 
 

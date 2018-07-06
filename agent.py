@@ -140,7 +140,6 @@ class RMAgent(Agent):
         self.ammo = amount
 
     def update_policy(self, experience):
-        print('iter: ', self._iter)
         for _item in experience:  # each item is [[id, ob, ammo, prev_joint_action], action, return]
             _s_key = str(_item[0][0]) + ''.join(map(str, _item[0][1])) + str(_item[0][2]) + ''.join(map(str, _item[0][3]))
             if _s_key not in self.u_s:
@@ -245,6 +244,34 @@ def one_hot(_index, dim):
     return _tmp
 
 
+def decode_from_tfrecords(filename_queue, batch_size=1):
+    reader = tf.TFRecordReader()
+    _, queue_batch = reader.read_up_to(filename_queue, batch_size)
+    if batch_size > 0:
+        min_after_dequeue = 1000
+        capacity = min_after_dequeue + 3 * batch_size
+        batch_serialized_example = tf.train.shuffle_batch([queue_batch],
+                                                          batch_size=batch_size,
+                                                          num_threads=3,
+                                                          capacity=capacity,
+                                                          min_after_dequeue=min_after_dequeue,
+                                                          enqueue_many=True)
+
+    features = tf.parse_example(batch_serialized_example,
+                                features={
+                                    'State': tf.FixedLenFeature([(_height + _width + 4) + (9 + _height + _width) * _num_players + 3], tf.float32),
+                                    'Return': tf.FixedLenFeature([1], tf.float32),
+                                    'Act': tf.FixedLenFeature([1], tf.float32),
+                                    'Act_prob': tf.FixedLenFeature([1], tf.float32)
+                                })
+    state = features['State']
+    cumulated_reward = features['Return']
+    act = features['Act']
+    act_prob = features['Act_prob']
+
+    return state, cumulated_reward, act, act_prob
+
+
 def average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers.
 
@@ -323,7 +350,7 @@ class NRMAgent(RMAgent):
         self.session = tf.Session(graph=self.graph, config=gpu_config)
         model = Model(self.graph)
         self.out, self.t_out, self.h_state, self.get_weights, self.update_weights, self.average_strategy, self.behavior_pi, self.update_target_weights, self.get_cu_re = \
-            model.create_model(self.session, input_dim=(10 + _height + _width) * _num_players + 3, out_dim=11, action_dim=5)
+            model.create_model(self.session, input_dim=(_height + _width + 4) + (9 + _height + _width) * _num_players + 3, out_dim=11, action_dim=5)
         # self.out2, self.update_weights = model.create_target_model(input_dim=(10 + _height + _width) * _num_players + 3, out_dim=11, action_dim=5)
         # self.session.run(tf.local_variables_initializer())
         # self.session.run(tf.global_variables_initializer())
@@ -335,10 +362,11 @@ class NRMAgent(RMAgent):
         #     print(np.shape(w))
         self.update_target_weights(weights)
         self._iter = 1
+        self.history_buffer = []
 
     def action(self, state, action_space):
         one_hot_state = self.parse_state(state)
-        s = one_hot(self.id, _num_players) + one_hot_state + [self.ammo / float(_ammo)] * 3
+        s = one_hot_state + [self.ammo / float(_ammo)] * 3
         if not self.test:
             prob = self.behavior_pi(s)
         else:
@@ -346,20 +374,15 @@ class NRMAgent(RMAgent):
         if len(action_space) > 4:
             return np.random.choice(action_space, p=prob)
         else:
-            trunc_prob = np.true_divide(prob[1:], sum(prob[1:]))
+            if sum(prob[1:]) > 0:
+                trunc_prob = np.true_divide(prob[1:], sum(prob[1:]))
+            else:
+                trunc_prob = np.ones(len(action_space))/len(action_space)
             return np.random.choice(action_space, p=trunc_prob)
 
-    def update_policy(self, experience):
-        _states = []
-        _cu_re = []
-        _act = []
-        for _item in experience:  # each item is [[id, ob, ammo, prev_joint_action], action, return]
-            one_hot_state = self.parse_state([_item[0][1], _item[0][3]])
-            s = one_hot(self.id, _num_players) + one_hot_state + [_item[0][2] / float(_ammo)] * 3
-            _states.append(s)
-            _act.append(one_hot(_item[1], 5))
-            _cu_re.append(_item[2])
-
+    def update_policy(self, num_tfrecords=1):
+        graph = tf.Graph()
+        session = tf.Session(graph=graph, config=gpu_config)
         batch_size = _batch_size
         n_epochs = _num_epochs
 
@@ -369,36 +392,20 @@ class NRMAgent(RMAgent):
         c1 = 0.5
         c2 = 2.0
         c3 = 1.0
-        opt = tf.train.GradientDescentOptimizer(lr)
-        tower_grads = []
-        tower_vars = []
+
         #os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
         no_gpu = not is_gpu_available()
         if no_gpu:
             num_gpus = 1
-        with self.session as sess:
-            _states = np.array(_states)
-            _cu_re = np.array(_cu_re)
-            _act = np.array(_act)
-            h_state = tf.placeholder(_states.dtype, _states.shape, name='h_state')
-            h_return = tf.placeholder(_cu_re.dtype, _cu_re.shape, name='h_re')
-            h_act = tf.placeholder(_act.dtype, _act.shape, name='h_act')
-            dataset = tf.data.Dataset.from_tensor_slices({
-                'state': h_state,
-                'return': h_return,
-                'action': h_act
-            })
-            dataset = dataset.repeat(n_epochs).shuffle(10000).batch(batch_size*num_gpus)
-            iterator = dataset.make_initializable_iterator()
-            sess.run(iterator.initializer, feed_dict={h_state: _states,
-                                                      h_return: _cu_re,
-                                                      h_act: _act})
-            #     while True:
-            #         print(sess.run(one_element))
-            #         step += 1
-            # except tf.errors.OutOfRangeError:
-            #     print("end!")
-
+        with session as sess:
+            opt = tf.train.GradientDescentOptimizer(lr)
+            tower_grads = []
+            tower_vars = []
+            tf_record_list = ['episodes/{}.tfrecords'.format(i) for i in xrange(num_tfrecords)]
+            # print(tf_record_list)
+            filename_queue = tf.train.string_input_producer(tf_record_list, num_epochs=n_epochs, shuffle=True)
+            state, cu_re, label, act_prob = decode_from_tfrecords(filename_queue, batch_size=batch_size * num_gpus)
+            act = tf.cast(label, tf.int32)
             global_step = tf.Variable(0, name='global_step', trainable=False)
             global_iteration = tf.Variable(1, name='global_iteration', trainable=False)
             train_explosion = False
@@ -408,27 +415,28 @@ class NRMAgent(RMAgent):
                 for i in range(num_gpus):
                     with tf.device('/cpu:0' if no_gpu else '/gpu:%d' % i):
                         with tf.name_scope('%s_%d' % ("tower", i)) as scope:
-                            h_state = tf.placeholder(tf.float32, [None, (10 + _height + _width) * _num_players + 3], name='h_state')
-                            h_act = tf.placeholder(tf.int32, [None, 5], name='target_action{}'.format(i))
+                            h_state = tf.placeholder(tf.float32, [None, (_height + _width + 4) + (9 + _height + _width) * _num_players + 3], name='h_state')
+                            h_act = tf.placeholder(tf.int32, [None, 1], name='target_action{}'.format(i))
                             # h_act_prob = tf.placeholder(tf.float32, [None, 5], name='target_action_prob{}'.format(i))
                             h_cu_re = tf.placeholder(tf.float32, [None, 1], name='cumulated_reward{}'.format(i))  # return from current state
                             h_cu_re_a = tf.placeholder(tf.float32, [None, 5], name='cumulated_reward{}'.format(i))  # return from current after taking some action
-                            qv_value = self.get_cu_re
-                            cross_entropy_mean = tf.nn.softmax_cross_entropy_with_logits(logits=self.out[:, 0:5],
-                                                                                         labels=h_act)
+                            out, t_out, h_input, update_params, update_target_params, get_weights = build_training_model(h_state, 11, 5)
+                            # qv_value = out[:, 5: 11]
+                            cross_entropy_mean = tf.nn.softmax_cross_entropy_with_logits(logits=out[:, 0:5],
+                                                                                         labels=tf.one_hot(h_act, 5))
                             pi_loss = tf.reduce_mean(cross_entropy_mean)
                             if tf.__version__ >= '2.3':  # just use mse
-                                q_loss = tf.losses.huber_loss(predictions=self.out[:, 5:10], labels=h_cu_re_a, delta=1.0)
-                                v_loss = tf.losses.huber_loss(predictions=self.out[:, 10:11], labels=h_cu_re, delta=1.0)
+                                q_loss = tf.losses.huber_loss(predictions=out[:, 5:10], labels=h_cu_re_a, delta=1.0)
+                                v_loss = tf.losses.huber_loss(predictions=out[:, 10:11], labels=h_cu_re, delta=1.0)
                             else:
-                                q_loss = tf.losses.mean_squared_error(predictions=self.out[:, 5:10], labels=h_cu_re_a)
-                                v_loss = tf.losses.mean_squared_error(predictions=self.out[:, 10:11], labels=h_cu_re)
+                                q_loss = tf.losses.mean_squared_error(predictions=out[:, 5:10], labels=h_cu_re_a)
+                                v_loss = tf.losses.mean_squared_error(predictions=out[:, 10:11], labels=h_cu_re)
 
                             # pi_logits = tf.nn.softmax(logits=self.out[:, 0:6])
                             # entropy = -tf.reduce_mean(tf.reduce_sum(-tf.log(pi_logits) * pi_logits, axis=1))  # negative of entropy term so that can be directly added in the loss function which is minimized
 
                             loss = tf.reduce_mean(c1 * v_loss + c2 * q_loss + c3 * pi_loss, name='tower{}_loss'.format(i))
-                            tower_vars.append(([self.h_state, h_cu_re, h_act, h_cu_re_a], qv_value, q_loss,
+                            tower_vars.append(([h_state, h_cu_re, h_act, h_cu_re_a], q_loss,
                                                v_loss, pi_loss, loss))
                             # Reuse variables for the next tower.
                             tf.get_variable_scope().reuse_variables()
@@ -447,7 +455,7 @@ class NRMAgent(RMAgent):
             # synchronization point across all towers.
             grads = average_gradients(tower_grads)
 
-            tower_holders, tower_QVs, tower_q_losses, tower_v_losses, tower_pi_loss, tower_losses = zip(*tower_vars)
+            tower_holders, tower_q_losses, tower_v_losses, tower_pi_loss, tower_losses = zip(*tower_vars)
             summaries.append(tf.summary.scalar('learning_rate', lr))
             summaries.append(tf.summary.scalar('q loss', tf.reduce_mean(tower_q_losses)))
             summaries.append(tf.summary.scalar('value loss', tf.reduce_mean(tower_v_losses)))
@@ -473,10 +481,12 @@ class NRMAgent(RMAgent):
 
             # Build the summary operation from the last tower summaries.
             summary_op = tf.summary.merge(summaries)
-            writer = tf.summary.FileWriter(logdir, self.graph)
+            writer = tf.summary.FileWriter(logdir, graph)
 
         # with self.session as sess, sess.as_default():
-            self.session.run(tf.global_variables_initializer())
+            print(self.get_weights()[2][1][0:4])
+            update_params(sess, self.get_weights())
+            update_target_params(sess, self.get_weights())
             begin = time()
             step = 0
             if not os.path.exists('global_step{}'.format(self.id)):
@@ -484,35 +494,36 @@ class NRMAgent(RMAgent):
             else:
                 with open('global_step{}'.format(self.id), 'rb') as gs_f:
                     shift_step = int(gs_f.read())
+            sess.run(tf.local_variables_initializer())
+            coord = tf.train.Coordinator()
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+            sess.run(tf.global_variables_initializer())
             try:
-                one_element = iterator.get_next()
-                while True:
-                    batch_data = sess.run(one_element)  # 'state', 'return', 'action'
+                while not coord.should_stop():
                     # print(len(batch_data['return']))
-                    if len(batch_data['return']) != batch_size:
-                        raise tf.errors.OutOfRangeError(None, None, None)
                     start_time = time()
+                    _state, _cu_re, _act = sess.run([state, cu_re, act])  # 'state', 'return', 'action'
                     _t_f = {}
+                    # print(np.shape(_state))
                     _feed_qv = []
                     for _k in range(num_gpus):  # [h_state, h_cu_re, h_act, h_cu_re_a]
-                        _t_f[tower_holders[_k][0]] = batch_data['state'][_k * batch_size: (_k + 1) * batch_size]
-                        _feed_qv.append(tower_QVs[_k](batch_data['state'][_k * batch_size: (_k + 1) * batch_size]))
+                        _t_f[tower_holders[_k][0]] = _state[_k * batch_size: (_k + 1) * batch_size]
+                        # _feed_qv.append(tower_QVs[_k](_state[_k * batch_size: (_k + 1) * batch_size]))
                     # _feed_qv = np.squeeze(_feed_qv)
                     for _k in range(num_gpus):
-                        _g = np.reshape(batch_data['return'][_k * batch_size: (_k + 1) * batch_size], [batch_size, 1])  # the return g_k = \sum \gamma^k r_{n+k}
+                        _g = np.reshape(_cu_re[_k * batch_size: (_k + 1) * batch_size], [batch_size, 1])  # the return g_k = \sum \gamma^k r_{n+k}
                         # print(np.shape(_g))
-                        _action_taken = batch_data['action'][_k * batch_size: (_k + 1) * batch_size]
-                        _t_f[tower_holders[_k][1]] = np.true_divide((self._iter - 1) * _feed_qv[_k][:, 5:6] + _g, self._iter)  # to fit ( T-1 iter + this iter )
+                        _action_taken = _act[_k * batch_size: (_k + 1) * batch_size]
+                        _t_f[tower_holders[_k][1]] = _g  # to fit ( T-1 iter + this iter )
                         _t_f[tower_holders[_k][2]] = _action_taken
-                        _t_f[tower_holders[_k][3]] = np.true_divide((self._iter - 1) * _feed_qv[_k][:, 0:5] + _action_taken * _g.repeat(5, axis=1),
-                                                                    self._iter)  # to fit ( T-1 iter + this iter )/(T-1). np.eye(C)[index] return one_hot array of index
+                        _t_f[tower_holders[_k][3]] = _action_taken * _g.repeat(5, axis=1)  # np.eye(C)[index] return one_hot array of index
                     # logger.info('Time for fetch and feed dict Step %d: %.5f sec a step' % (step+1, time.time()-start_time))
-                    if (step + 1) % 100 == 0:
+                    if (step + 1) % 20 == 0:
                         # start_time = time.time()
                         _, summary = sess.run([train_op, summary_op], feed_dict=_t_f)
                         writer.add_summary(summary, shift_step+step)
                         duration = time() - start_time
-                        if (step+1) % 500 == 0:
+                        if (step+1) % 100 == 0:
                             logger.info('Step %d: %.5f sec a step' % (step + 1, duration))
                     else:
                         _ = sess.run([train_op], feed_dict=_t_f)
@@ -526,20 +537,22 @@ class NRMAgent(RMAgent):
                 logger.info('total time elapsed: %.2f min' % ((time() - begin) / 60.0))
                 # with open('mgb_{}_{}.log'.format(num_gpus, batch_size), 'a+') as rlfile:
                 #     rlfile.write('%.2f min\n' % ((time.time() - begin) / 60.0))
-                t_weights = self.get_weights()
-                np.save('weights_{}.npy'.format(self.id), self.get_weights())
+                t_weights = get_weights(sess)
+                np.save('weights_{}.npy'.format(self.id), get_weights(sess))
                 with open('traintime.log', 'a+') as runlogfile:
                     runlogfile.write('total time elapsed: %.2f min\n' % ((time() - begin) / 60.0))
                 with open('global_step{}'.format(self.id), 'wb+') as global_step_f:
                     global_step_f.write(str(step+shift_step))
             finally:
+                coord.request_stop()
                 print('Training Done')
+            coord.join(threads)
         return t_weights
 
     def parse_state(self, state):
         one_hot_state = []
         # print(state[0], state[1])
-        for i in range(len(state[0])):
+        for i in range(len(state[0])):  # state[0] is a 3*N int list where each 3-tuple consists of (x, y, dir)
             if i % 3 == 0:
                 one_hot_state += one_hot(state[0][i], _width)
             elif i % 3 == 1:
@@ -551,4 +564,11 @@ class NRMAgent(RMAgent):
                 one_hot_state += one_hot(state[1][i], 5)
             else:
                 one_hot_state += [0] * 5
+        for _, _item in enumerate(state[0][self.id*3: self.id*3+3]):  # duplicate the position and direction information to identify each player and thus the state can be reused (shared by all the players)
+            if _ == 0:
+                one_hot_state = one_hot(_item, _width) + one_hot_state
+            elif _ == 1:
+                one_hot_state = one_hot(_item, _height) + one_hot_state
+            else:
+                one_hot_state = one_hot(_item-1, 4) + one_hot_state
         return one_hot_state
