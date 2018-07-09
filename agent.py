@@ -386,12 +386,12 @@ class NRMAgent(RMAgent):
         batch_size = _batch_size
         n_epochs = _num_epochs
 
-        lr = 1e-2
+        lr = 1e-1
         num_gpus = _num_gpu
         logdir = 'save'+'/'+str(self.id)
         c1 = 0.5
-        c2 = 2.0
-        c3 = 1.0
+        c2 = 2.5
+        c3 = 1e-3
 
         #os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
         no_gpu = not is_gpu_available()
@@ -484,7 +484,7 @@ class NRMAgent(RMAgent):
             writer = tf.summary.FileWriter(logdir, graph)
 
         # with self.session as sess, sess.as_default():
-            print(self.get_weights()[2][1][0:4])
+        #     print(self.get_weights()[2][1][0:4])
             update_params(sess, self.get_weights())
             update_target_params(sess, self.get_weights())
             begin = time()
@@ -518,12 +518,12 @@ class NRMAgent(RMAgent):
                         _t_f[tower_holders[_k][2]] = _action_taken
                         _t_f[tower_holders[_k][3]] = _action_taken * _g.repeat(5, axis=1)  # np.eye(C)[index] return one_hot array of index
                     # logger.info('Time for fetch and feed dict Step %d: %.5f sec a step' % (step+1, time.time()-start_time))
-                    if (step + 1) % 20 == 0:
+                    if (step + 1) % 100 == 0:
                         # start_time = time.time()
                         _, summary = sess.run([train_op, summary_op], feed_dict=_t_f)
                         writer.add_summary(summary, shift_step+step)
                         duration = time() - start_time
-                        if (step+1) % 100 == 0:
+                        if (step+1) % 500 == 0:
                             logger.info('Step %d: %.5f sec a step' % (step + 1, duration))
                     else:
                         _ = sess.run([train_op], feed_dict=_t_f)

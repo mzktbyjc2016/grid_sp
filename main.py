@@ -117,8 +117,8 @@ def train():
         _tmp_iter = []
         update_time = time()
         for _pid in range(1):
-            print(players[_pid].get_weights()[2][1][0:4])
-            _t_w = players[_pid].update_policy(total_epi)
+            # print(players[_pid].get_weights()[2][1][0:4])
+            _t_w = players[_pid].update_policy(min(total_epi, _max_epi))
             # _t_w = np.load('weights_{}.npy'.format(_pid))
             _tmp_weights.append(_t_w)
             _tmp_iter.append(players[_pid]._iter)
@@ -134,7 +134,7 @@ def train():
 
 def test():
     world = GridRoom()
-    players = [RandomAgent(i) for i in range(_num_players)]
+    players = [ShootingAgent(i) for i in range(_num_players)]
     players[0] = NRMAgent(0)
     # players[0] = NRMAgent(0)
     # players[0] = NRMAgent(0)
@@ -146,9 +146,9 @@ def test():
         players[0].unseen = 0
         players[1].seen = 0
         players[1].unseen = 0
-        for _i in range(_num_players-2):
-            begin = time()
-            players[_i].update_weights(np.load('model/weights_{}_{}.0.npy'.format(_i, _k)))
+        for _i in range(_num_players-1):
+            # begin = time()
+            players[_i].update_weights(np.load('model/weights_{}_{}.npy'.format(_i, _k)))
             players[_i].test = False
             players[_i].exploration = True
             # print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
@@ -197,7 +197,7 @@ if __name__ == '__main__':
         os.mkdir('episodes')
     if not os.path.exists('model'):
         os.mkdir('model')
-    train()
+    # train()
     test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:
