@@ -67,7 +67,7 @@ def train():
     for _iteration in range(_train_iter):
         iter_time = time()
         _s_th = min(args.thread, cpu_count())
-        _sample_iter = max(int(_max_epi * 0.1 * max(_trunc_prob, 1.0/max(_iteration-9, 1)) / (_s_th * _num_players)), 1)
+        _sample_iter = max(int(_max_epi * 0.1 * max(_trunc_prob, 1.0/max(_iteration-9, 1)) / (_s_th)), 1)
         # players = [NRMAgent(i) for i in range(_num_players)]
         for _p in range(_num_players):  # share weights
             if _p == 0:
@@ -84,20 +84,20 @@ def train():
         thread_list = []
         ret_code = []
         ir_list = []
-        if _sample_iter*_num_players*_s_th + total_epi <= _max_epi:  # assign the corresponding TFRecord index and each simulation thread produces sample_iter*num_players episodes
-            ir_list = np.array(range(total_epi, total_epi+_sample_iter*_num_players*_s_th), dtype=np.int64)
+        if _sample_iter*_s_th + total_epi <= _max_epi:  # assign the corresponding TFRecord index and each simulation thread produces sample_iter*num_players episodes
+            ir_list = np.array(range(total_epi, total_epi+_sample_iter*_s_th), dtype=np.int64)
             for _ in range(_s_th):
-                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_: _sample_iter*(_+1)])
         elif total_epi < _max_epi:
             _temp = range(total_epi, _max_epi)
-            _temp.extend(sample(range(total_epi), _s_th*_sample_iter*_num_players + total_epi - _max_epi))
+            _temp.extend(sample(range(total_epi), _s_th*_sample_iter + total_epi - _max_epi))
             ir_list = np.array(_temp, dtype=np.int64)
             for _ in range(_s_th):
-                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_: _sample_iter*(_+1)])
         else:  # total episodes exceed the max episodes buffer size
-            ir_list = np.array(sample(range(_max_epi), _s_th * _sample_iter*_num_players), dtype=np.int64)
+            ir_list = np.array(sample(range(_max_epi), _s_th * _sample_iter), dtype=np.int64)
             for _ in range(_s_th):
-                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_num_players*_: _sample_iter*_num_players*(_+1)])
+                np.save('index/{}.npy'.format(_), ir_list[_sample_iter*_: _sample_iter*(_+1)])
 
         for _th in range(_s_th):
             thread_list.append(subprocess.Popen(shlex.split('python simulation.py -th {} -si {} -cur_it {}'.format(_th, _sample_iter, _iteration+1)), stdout=open('res', 'wb+'), stderr=subprocess.STDOUT))
@@ -108,7 +108,7 @@ def train():
         #     with open('episodes/{}.pkl'.format(_i_th), 'rb') as ef:
         #         _exp.append(cPickle.load(ef))
         # print('Time for simulation', time()-iter_time)
-        total_epi += _s_th*_sample_iter*_num_players
+        total_epi += _s_th*_sample_iter
         print('Total episodes: ', total_epi)
         # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
         print('Episode simulation time: %.2f' % (time() - iter_time))
@@ -197,8 +197,8 @@ if __name__ == '__main__':
         os.mkdir('episodes')
     if not os.path.exists('model'):
         os.mkdir('model')
-    # train()
-    test()
+    train()
+    # test()
     # players = [RMAgent(i) for i in range(_num_players)]
     # with open('pi{}_{}.0.pkl'.format(0, 10), 'rb') as f:
     #     players[0].average_strategy = cPickle.load(f)

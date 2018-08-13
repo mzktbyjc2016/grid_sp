@@ -389,9 +389,9 @@ class NRMAgent(RMAgent):
         lr = 1e-1
         num_gpus = _num_gpu
         logdir = 'save'+'/'+str(self.id)
-        c1 = 0.5
-        c2 = 2.5
-        c3 = 1e-3
+        c1 = 0
+        c2 = 0.5
+        c3 = 0.1
 
         #os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
         no_gpu = not is_gpu_available()

@@ -96,9 +96,9 @@ def simulation(_seed, cur_iter):
             prev_j_ac = copy(joint_action)
             ob = n_state
         world.reset()
-        for _pid in range(_num_players):
-            print('write player')
-            train_writer = tf.python_io.TFRecordWriter('episodes/{}.tfrecords'.format(ir_list[_i*_num_players+_pid]))
+        for _pid in range(1):
+            # print('write player')
+            train_writer = tf.python_io.TFRecordWriter('episodes/{}.tfrecords'.format(ir_list[_i+_pid]))
             v = 0
             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
                 _item = players[_pid].exp_buffer[_k]

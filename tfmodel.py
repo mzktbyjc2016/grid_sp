@@ -63,7 +63,7 @@ class Model(object):
             qv_value = out[:, action_dim: 2 * action_dim + 1]
             q_value = qv_value[:, 0: action_dim]
             v_value = qv_value[:, action_dim: action_dim + 1]
-            regret_plus = tf.nn.relu(q_value - v_value)
+            regret_plus = tf.nn.relu(q_value - action_prob*q_value)
 
             pi_weights_v = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'pi')
             pi_update_placeholder = []
