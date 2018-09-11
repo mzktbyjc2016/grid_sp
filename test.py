@@ -13,7 +13,7 @@ from multiprocessing import Pool, Queue, Process
 from random import *
 import cPickle
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 from copy import copy
 from multiprocessing import cpu_count
 from tfmodel import *
@@ -22,6 +22,32 @@ import logging
 import os, gc
 import math
 import tfmodel
+from environment import GridRoom
+from agent import *
+import subprocess32 as subprocess
+import shlex
+import argparse, os, gc
+from multiprocessing import cpu_count
+# from simulation import simulation
+
+
+args = None
+config = ConfigParser.ConfigParser()
+with open('config.cfg', 'rw') as cfgfile:
+    config.readfp(cfgfile)
+    _width = int(config.get('environ', 'Width'))
+    _height = int(config.get('environ', 'Height'))
+    _num_players = int(config.get('environ', 'Players'))
+    _ammo = int(config.get('environ', 'Ammo'))
+    _max_step = int(config.get('environ', 'Max_Step'))
+    _gamma = float(config.get('environ', 'Gamma'))
+    _train_iter = int(config.get('algorithm', 'train_iter'))
+    # _sample_iter = int(config.get('algorithm', 'sample_iter'))
+    _test_iter = int(config.get('algorithm', 'test_iter'))
+    # _s_th = int(config.get('algorithm', 'simulation_thread'))
+    _frame_stack = int(config.get('environ', 'Frame_stack'))
+    _max_epi = int(config.get('algorithm', 'max_num_episodes'))
+    _trunc_prob = float(config.get('algorithm', 'truncated_prob'))
 
 
 logging.basicConfig()
@@ -309,18 +335,18 @@ def average_gradients(tower_grads):
     return average_grads
 
 
-def update_policy(num_tfrecords=1):
+def update_policy(num_tfrecords=1, cur_iter=1):
     graph = tf.Graph()
     session = tf.Session(graph=graph, config=gpu_config)
     batch_size = _batch_size
     n_epochs = _num_epochs
 
-    lr = 1e-1
+    lr = 1e-2
     num_gpus = _num_gpu
-    logdir = 'save'
-    c1 = 1.0
+    logdir = 'save/test/{}'.format(cur_iter)
+    c1 = 0
     c2 = 1.0
-    c3 = 0.005
+    c3 = 0.0
 
     #os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
     no_gpu = not is_gpu_available()
@@ -331,7 +357,7 @@ def update_policy(num_tfrecords=1):
         opt = tf.train.AdamOptimizer(lr)
         tower_grads = []
         tower_vars = []
-        tf_record_list = ['episodes/{}.tfrecords'.format(i) for i in xrange(num_tfrecords)]
+        tf_record_list = ['episodes/0/{}.tfrecords'.format(i) for i in xrange(2000, 2000+num_tfrecords*cur_iter)]
         # print(tf_record_list)
         filename_queue = tf.train.string_input_producer(tf_record_list, num_epochs=n_epochs, shuffle=True)
         state, cu_re, label, act_prob = decode_from_tfrecords(filename_queue, batch_size=batch_size * num_gpus)
@@ -339,7 +365,7 @@ def update_policy(num_tfrecords=1):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         global_iteration = tf.Variable(1, name='global_iteration', trainable=False)
         train_explosion = False
-        lr = tf.train.exponential_decay(lr, global_step, 20, 0.99, staircase=True)
+        # lr = tf.train.exponential_decay(lr, global_step, 500, 0.9985, staircase=True)
 
         with tf.variable_scope(tf.get_variable_scope()):
             for i in range(num_gpus):
@@ -364,9 +390,10 @@ def update_policy(num_tfrecords=1):
 
                         # pi_logits = tf.nn.softmax(logits=self.out[:, 0:6])
                         # entropy = -tf.reduce_mean(tf.reduce_sum(-tf.log(pi_logits) * pi_logits, axis=1))  # negative of entropy term so that can be directly added in the loss function which is minimized
-
-                        loss = tf.reduce_mean(c1 * v_loss + c2 * q_loss + c3 * pi_loss, name='tower{}_loss'.format(i))
-                        tower_vars.append(([h_state, h_cu_re, h_act, h_cu_re_a], q_loss,
+                        h_c2 = tf.placeholder(tf.float32, [1], name='coefficient_q')
+                        h_c3 = tf.placeholder(tf.float32, [1], name='coefficient_pi')
+                        loss = tf.reduce_mean(c1 * v_loss + h_c2 * q_loss + h_c3 * pi_loss, name='tower{}_loss'.format(i))
+                        tower_vars.append(([h_state, h_cu_re, h_act, h_cu_re_a, h_c2, h_c3], q_loss,
                                            v_loss, pi_loss, loss))
                         # Reuse variables for the next tower.
                         tf.get_variable_scope().reuse_variables()
@@ -419,11 +446,12 @@ def update_policy(num_tfrecords=1):
     #     update_target_params(sess, self.get_weights())
         begin = time()
         step = 0
-        if not os.path.exists('global_step'):
-            shift_step = 0
-        else:
-            with open('global_step', 'rb') as gs_f:
-                shift_step = int(gs_f.read())
+        shift_step = 0
+        # if not os.path.exists('global_step'):
+        #     shift_step = 0
+        # else:
+        #     with open('global_step', 'rb') as gs_f:
+        #         shift_step = int(gs_f.read())
         sess.run(tf.local_variables_initializer())
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
@@ -447,14 +475,23 @@ def update_policy(num_tfrecords=1):
                     _t_f[tower_holders[_k][1]] = _g  # to fit ( T-1 iter + this iter )
                     _t_f[tower_holders[_k][2]] = _action_taken
                     _t_f[tower_holders[_k][3]] = _action_taken * _g.repeat(5, axis=1)  # np.eye(C)[index] return one_hot array of index
+                    _t_f[tower_holders[_k][4]] = np.array([c2])
+                    _t_f[tower_holders[_k][5]] = np.array([c3])
                 # logger.info('Time for fetch and feed dict Step %d: %.5f sec a step' % (step+1, time.time()-start_time))
                 if (step + 1) % 100 == 0:
                     # start_time = time.time()
-                    _, summary = sess.run([train_op, summary_op], feed_dict=_t_f)
+                    _, t_q_loss, t_pi_loss, summary = sess.run([train_op, tower_q_losses, tower_pi_loss, summary_op], feed_dict=_t_f)
                     writer.add_summary(summary, shift_step+step)
+                    # print(np.mean(t_pi_loss)/np.mean(t_q_loss))
+                    # if np.mean(t_pi_loss)/np.mean(t_q_loss) > 1:
+                    #     c2 = min([np.mean(t_pi_loss)/np.mean(t_q_loss)*c3, 5000.0])
+                    # else:
+                    #     c2 = max([np.mean(t_pi_loss)/np.mean(t_q_loss)*c3, 0.5])
+
                     duration = time() - start_time
                     if (step+1) % 2000 == 0:
                         logger.info('Step %d: %.5f sec a step' % (step + 1, duration))
+                        # print(c2, c3)
                 else:
                     _ = sess.run([train_op], feed_dict=_t_f)
                 step += 1
@@ -490,7 +527,7 @@ def table_update():
     session = tf.Session(graph=graph, config=gpu_config)
     num_records = 4000
     with session as sess:
-        tf_record_list = ['episodes/{}.tfrecords'.format(i) for i in xrange(num_records)]
+        tf_record_list = ['episodes/0/{}.tfrecords'.format(i) for i in xrange(num_records)]
         # print(tf_record_list)
         filename_queue = tf.train.string_input_producer(tf_record_list, num_epochs=1, shuffle=False)
         state, cu_re, label, act_prob = decode_from_tfrecords(filename_queue, batch_size=1)
@@ -560,7 +597,7 @@ def comparison():
     session = tf.Session(graph=graph, config=gpu_config)
 
     with session as sess:
-        tf_record_list = ['episodes/{}.tfrecords'.format(i) for i in xrange(num_records)]
+        tf_record_list = ['episodes/0/{}.tfrecords'.format(i) for i in xrange(num_records)]
         # print(tf_record_list)
         filename_queue = tf.train.string_input_producer(tf_record_list, num_epochs=1, shuffle=False)
         state, cu_re, label, act_prob = decode_from_tfrecords(filename_queue, batch_size=1)
@@ -638,6 +675,269 @@ def comparison():
         coord.join(threads)
 
 
+def data_dis():
+    num_records = 2000
+
+    graph = tf.Graph()
+    session = tf.Session(graph=graph, config=gpu_config)
+
+    with session as sess:
+        tf_record_list = ['episodes/0/{}.tfrecords'.format(i) for i in xrange(num_records)]
+        # print(tf_record_list)
+        filename_queue = tf.train.string_input_producer(tf_record_list, num_epochs=1, shuffle=False)
+        state, cu_re, label, act_prob = decode_from_tfrecords(filename_queue, batch_size=1)
+        act = tf.cast(label, tf.int32)
+
+        h_state = tf.placeholder(tf.float32, [None, (_height + _width + 4) + (9 + _height + _width) * _num_players + 3],
+                                 name='h_state')
+        h_act = tf.placeholder(tf.int32, [None, 1], name='target_action{}'.format(i))
+        # h_act_prob = tf.placeholder(tf.float32, [None, 5], name='target_action_prob{}'.format(i))
+        h_cu_re = tf.placeholder(tf.float32, [None, 1],
+                                 name='cumulated_reward{}'.format(i))  # return from current state
+        h_cu_re_a = tf.placeholder(tf.float32, [None, 5],
+                                   name='cumulated_reward{}'.format(i))  # return from current after taking some action
+        out, t_out, h_input, update_params, update_target_params, get_weights = build_training_model(h_state, 11, 5)
+        action_prob = tf.nn.softmax(out[:, 0:5])
+        sess.run(tf.local_variables_initializer())
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+        sess.run(tf.global_variables_initializer())
+        begin = time()
+        total = 0
+        try:
+            while not coord.should_stop():
+                _state, _act, _cu_re = sess.run([state, act, cu_re])  # 'state', 'return', 'action'
+                if _cu_re[0][0] != 0:
+                    if np.abs(_cu_re[0][0]) == 1:
+                        total += 1
+        except tf.errors.OutOfRangeError:
+            logger.info('total time elapsed: %.2f min' % ((time() - begin) / 60.0))
+            print('non zero trajectory', total)
+        # finally:
+        coord.request_stop()
+        coord.join(threads)
+
+
+def _bytes_feature(value):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+
+def _float_feature(value):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
+def _int_feature(value):
+    return tf.train.Feature(int_list=tf.train.Int64List(value=value))
+
+
+def simulation(players, q, _seed, cur_iter):
+    import tensorflow as tf
+
+    world = GridRoom(_seed)
+    sampled_exp = []
+    for _p in range(_num_players):
+        sampled_exp.append([])
+    for _i in range(args.sample_iter):
+        for _pid in range(_num_players):
+            if cur_iter < 2:
+                players[_pid].exploration = True
+            players[_pid].set_ammo(_ammo)
+            players[_pid].exp_buffer = []
+        ob = world.cur_state()
+        done = False
+        prev_j_ac = [9] * _num_players
+        while not done:
+            joint_action = [9] * _num_players
+            for _pid in world.alive_players:
+                _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
+                joint_action[_pid] = _ac
+            done, r, n_state = world.step(joint_action)
+            for _pid in world.alive_players:
+                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
+            for _pid in world.dead_in_this_step:
+                players[_pid].exp_buffer.append([[_pid, ob, players[_pid].ammo, prev_j_ac], joint_action[_pid], r[_pid]])
+            for _pid, _ac in enumerate(joint_action):
+                if _ac == 0:
+                    players[_pid].set_ammo(players[_pid].ammo-1)
+            prev_j_ac = copy(joint_action)
+            ob = n_state
+        world.reset()
+        for _pid in range(_num_players):  # TODO : replace with player 1
+            v = 0
+            for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
+                players[_pid].exp_buffer[_k][2] += _gamma * v
+                v = players[_pid].exp_buffer[_k][2]
+            # if v < 0:
+            #     print(players[_pid].exp_buffer)
+            # print(players[_pid].exp_buffer)
+            sampled_exp[_pid] += players[_pid].exp_buffer  # all agents share it if sp is used
+            if _pid == 0:
+                # print('write player')
+                train_writer = tf.python_io.TFRecordWriter('episodes/{}/{}.tfrecords'.format(_pid, cur_iter*2000 + _i))
+                v = 0
+                for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
+                    _item = players[_pid].exp_buffer[_k]
+                    # players[_pid].exp_buffer[_k][2] += _gamma * v
+                    v = players[_pid].exp_buffer[_k][2]
+                    one_hot_s = players[_pid].parse_state([_item[0][1], _item[0][3]])
+                    full_state = one_hot_s + [_item[0][2] / float(_ammo)] * 3
+                    b_feature = {'State': _float_feature(full_state),
+                                 'Return': _float_feature([v]),
+                                 'Act': _float_feature([_item[1]]), 'Act_prob': _float_feature([1.0])}
+                    example = tf.train.Example(features=tf.train.Features(feature=b_feature))
+                    train_writer.write(example.SerializeToString())
+                train_writer.close()
+    q.put(sampled_exp)
+
+
+def update_pi(player, exp, q):
+    player.update_policy(exp)
+    q.put([player.u_s, player.u_sa, player.average_strategy])
+
+
+def train():
+    # world = GridRoom()
+    players = [RMAgent(i) for i in range(_num_players)]
+    # for _i in range(0):
+    #     with open('v{}_3.999.pkl'.format(_i), 'rb') as f:
+    #         players[_i].u_s = cPickle.load(f)
+    #     with open('q{}_3.999.pkl'.format(_i), 'rb') as f:
+    #         players[_i].u_sa = cPickle.load(f)
+    #     with open('pi{}_3.999.pkl'.format(_i), 'rb') as f:
+    #         players[_i].average_strategy = cPickle.load(f)
+    begin = time()
+    _s_th = args.thread
+    # sampled_exp = []
+    _save_fre = _train_iter / 10
+    for _iteration in range(_train_iter):
+        iter_time = time()
+        sampled_exp = []
+        for _p in range(_num_players):
+            sampled_exp.append([])
+        _queue_list = []
+        _p_list = []
+        _exp = []
+        for _th in range(_s_th):
+            _q = Queue()
+            p = Process(target=simulation, args=(copy(players), _q, None, _iteration+1))
+            p.daemon = True
+            p.start()
+            # p.join()
+            _queue_list.append(_q)
+            _p_list.append(p)
+            # _exp.append(_q.get())
+        for _i_p, _q in enumerate(_queue_list):
+            exp_from_th = _q.get()
+            # print('exp_from', len(exp_from_th[0]), len(exp_from_th[1]), len(exp_from_th[2]))
+            _exp.append(exp_from_th)
+            # _p_list[_i_p].join()
+        # print(len(_exp[0][0]), len(_exp[1][0]))
+        print('Time for simulation', time()-iter_time)
+        for _th in range(_s_th):
+            for _pid in range(_num_players):
+                sampled_exp[_pid].extend(_exp[_th][_pid])
+        # print(len(sampled_exp[0]), len(sampled_exp[1]), len(sampled_exp[2]))
+        print('Episode time: %.2f' % (time() - iter_time))
+        # end sample
+        update_time = time()
+        update_list = []
+        update_q_list = []
+        for _pid in range(_num_players):
+            _q = Queue()
+            p = Process(target=update_pi, args=(copy(players[_pid]), sampled_exp[_pid], _q))
+            p.start()
+            update_list.append(p)
+            update_q_list.append(_q)
+            # players[_pid].update_policy(sampled_exp[_pid])
+        for _i_p, _p in enumerate(update_list):
+            _updated = update_q_list[_i_p].get()
+            players[_i_p].u_s = _updated[0]
+            players[_i_p].u_sa = _updated[1]
+            players[_i_p].average_strategy = _updated[2]
+            _p.join()
+        print('Update time: %.2f' %(time() - update_time))
+        print('state has seen', len(players[0].u_s), len(players[1].u_s))
+        for _pid in range(_num_players):
+            players[_pid]._iter += 1
+        gc.collect()
+        if (_iteration + 1) % 100 == 0:
+            print('This is %d step, %.3f' % (_iteration, _iteration/_train_iter))
+        if (_iteration + 1) % _save_fre == 0:
+            for _pid in range(_num_players-1):
+                with open('v{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
+                    cPickle.dump(players[_pid].u_s, f, 2)
+                with open('q{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
+                    cPickle.dump(players[_pid].u_sa, f, 2)
+                with open('pi{}_{}.pkl'.format(_pid, (_iteration+1)//_save_fre), 'wb') as f:
+                    cPickle.dump(players[_pid].average_strategy, f, 2)
+    print('Time eplapsed: %.2f' % (time() - begin))
+
+
+def test(_iter):
+    world = GridRoom()
+    players = [ShootingAgent1(i) for i in range(_num_players)]
+    # players[0] = ShootingAgent1(0)
+    players[0] = NRMAgent(0)
+
+    # players[0] = RMAgent(0)
+    # # num_records = 4000
+    # with open('v0_{}.0.pkl'.format(_iter), 'rb') as f:
+    #     players[0].u_s = cPickle.load(f)
+    # with open('q0_{}.0.pkl'.format(_iter), 'rb') as f:
+    #     players[0].u_sa = cPickle.load(f)
+    # with open('pi0_{}.0.pkl'.format(_iter), 'rb') as f:
+    #     players[0].average_strategy = cPickle.load(f)
+
+    # players.append(RandomAgent(1))
+    # players[0] = ShootingAgent(0)
+    # players[1] = ShootingAgent1(1)
+    for _k in range(1, 2):
+        players[0].seen = 0
+        players[0].unseen = 0
+        players[1].seen = 0
+        players[1].unseen = 0
+        for _i in range(_num_players-1):
+            # begin = time()
+            # # players[_i].update_weights(np.load('weights_.npy'))
+            players[_i].update_weights(np.load('model/test/weights_{}.npy'.format(_iter)))
+            players[_i].test = False
+            players[_i].exploration = False
+            # print('Time for load model: ', time() - begin, players[_i].u_s.__len__(), players[_i].u_sa.__len__(), players[_i].average_strategy.__len__())
+        # players[1].test = False
+        # players[1].exploration = True
+        total_r = np.zeros(_num_players)
+        begin = time()
+        # sampled_exp = []
+        step = 0.0
+        for _iteration in range(_test_iter):
+            iter_time = time()
+            for _i in range(1):
+                for _pid in range(_num_players):
+                    players[_pid].set_ammo(_ammo)
+                ob = world.cur_state()
+                done = False
+                prev_j_ac = [9] * _num_players
+                while not done:
+                    joint_action = [9] * _num_players
+                    for _pid in world.alive_players:
+                        _ac = players[_pid].action([ob, prev_j_ac], players[_pid].valid_action())
+                        joint_action[_pid] = _ac
+                    done, r, n_state = world.step(joint_action)
+                    # if done:
+                    #     print(world.dead_in_this_step, world.time_step, ob, prev_j_ac, players[0].ammo, n_state, joint_action, players[1].ammo)
+                    prev_j_ac = copy(joint_action)
+                    ob = n_state
+                    for _pid, _ac in enumerate(joint_action):
+                        if _ac == 0:
+                            players[_pid].set_ammo(players[_pid].ammo - 1)
+                total_r = np.add(total_r, world.players_total_reward)
+                step += world.time_step
+                world.reset()
+            # print('Episode time: %.2f' % (time() - begin))
+        print('Time eplapsed: %.2f min' % ((time() - begin)/60.0), step/_test_iter)
+        print(total_r)
+
+
 # a = [1.0, 7.0, round(0.999999),1,2,3,4,5]
 # print(a[-3:])
 # a = np.array(a, dtype=np.int64)
@@ -646,11 +946,72 @@ def comparison():
 # print(c)
 gc.collect()
 # table_update()
-update_policy(num_tfrecords=4000)
-comparison()
+# update_policy(num_tfrecords=4000)
+# comparison()
+# data_dis()
+# test()
 # a = np.array([0.1, 0.3, 0.6])
 # c = np.array([0.2, 0.8-1e-12, 1e-12])
 # print(c+1e-6, sum(-c*np.log(c)), sum(-c*np.log(c+1e-6)))
 # print(a*np.log((a+1e-6)/(c+1e-6)), sum(a*np.log(a/c)), sum(a*np.log(((a+1e-12)/(1+3e-12))/((c+1e-12)/(1+3e-12)))))
 
 np.array([0, 3, 5, 1, 3], dtype=np.float64)
+
+parser = argparse.ArgumentParser(description=None)
+parser.add_argument('-si', '--sample_iter', dest='sample_iter', default=100, type=int)
+parser.add_argument('-t', '--thread', dest='thread', default=1, type=int, help='Number of thread to simulation')
+args = parser.parse_args()
+# print(args.thread, args.sample_iter)
+if not os.path.exists('episodes'):
+    os.mkdir('episodes')
+if not os.path.exists('model'):
+    os.mkdir('model')
+if not os.path.exists('model/test'):
+    os.mkdir('model/test')
+if not os.path.exists('episodes/0'):
+    os.mkdir('episodes/0')
+
+# train()
+
+# for _iter in range(10, _train_iter - 39):
+#     t_weights = update_policy(10000, _iter)
+#     np.save('model/test/weights_{}.npy'.format(_iter), t_weights)
+#
+# # for _iter in range(1, 1 + _train_iter-40):
+# #     test(_iter)
+# #     print('----------------------------')
+#
+# for _iter in range(10, 11):
+#     with open('v0_{}.0.pkl'.format(_iter), 'rb') as f:
+#         u_s = cPickle.load(f)
+#     with open('q0_{}.0.pkl'.format(_iter), 'rb') as f:
+#         u_sa = cPickle.load(f)
+#     with open('pi0_{}.0.pkl'.format(_iter), 'rb') as f:
+#         average_strategy = cPickle.load(f)
+#     agent = NRMAgent(0)
+#     agent.update_weights(np.load('model/test/weights_{}.npy'.format(_iter)))
+#     for _key in u_s.keys():
+#         valid_action = 4
+#         tmp_q = []
+#         if int(_key[7]) > 0:
+#             valid_action = 5
+#         for i in range(5-valid_action, 5):
+#             tmp_key = copy(_key)+str(i)
+#             if tmp_key in u_sa.keys():
+#                 sa = u_sa[tmp_key]
+#             else:
+#                 sa = [0, 1.0]
+#             tmp_q.append(np.true_divide(sa[0], sa[1]))
+#         # print(_key)
+#         # print([list(map(int, list(_key[1:7]))), list(map(int, list(_key[7:9])))])
+#         one_hot_s = agent.parse_state([list(map(int, list(_key[1:7]))), list(map(int, list(_key[7:9])))])
+#         # print(one_hot_s + [int(_key[9])/float(_ammo)]*3)
+#         tmp_s = one_hot_s + [int(_key[9]) / float(_ammo)] * 3
+#         tmp_s = np.reshape(tmp_s, [-1, 37])
+#         print(agent.get_cu_re(tmp_s)[0][0:5], tmp_q)
+
+
+# a = '010203011'
+# print(list(map(int, list(a[0:6]))))
+c = np.random.random(size=[10, 32, 32])
+print(c)

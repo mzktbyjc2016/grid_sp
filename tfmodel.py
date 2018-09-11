@@ -14,7 +14,7 @@ import numpy as np
 
 def base_model(h_input, out_dim):
     with tf.variable_scope('pi'):
-        dense1 = tf.layers.dense(h_input, 256,
+        dense1 = tf.layers.dense(h_input, 64,
                                  activation=tf.nn.leaky_relu,
                                  use_bias=True,
                                  kernel_initializer=None,
@@ -24,13 +24,13 @@ def base_model(h_input, out_dim):
                                  activity_regularizer=None,
                                  trainable=True,
                                  name='dense1', )
-        # dense2 = tf.layers.dense(dense1, 256, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
+        dense2 = tf.layers.dense(dense1, 64, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
         # dense3 = tf.layers.dense(dense2, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense3')
 
-        out = tf.layers.dense(dense1, out_dim, use_bias=True, activation=None, name='out')
+        out = tf.layers.dense(dense2, out_dim, use_bias=True, activation=None, name='out')
 
     with tf.variable_scope('target'):
-        t_dense1 = tf.layers.dense(h_input, 256,
+        t_dense1 = tf.layers.dense(h_input, 64,
                                    activation=tf.nn.leaky_relu,
                                    use_bias=True,
                                    kernel_initializer=None,
@@ -40,10 +40,10 @@ def base_model(h_input, out_dim):
                                    activity_regularizer=None,
                                    trainable=True,
                                    name='dense1', )
-        # t_dense2 = tf.layers.dense(t_dense1, 256, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
+        t_dense2 = tf.layers.dense(t_dense1, 64, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense2')
         # t_dense3 = tf.layers.dense(t_dense2, 128, activation=tf.nn.leaky_relu, use_bias=True, bias_initializer=init_ops.zeros_initializer, name='dense3')
 
-        t_out = tf.layers.dense(t_dense1, out_dim, use_bias=True, activation=None, name='out')
+        t_out = tf.layers.dense(t_dense2, out_dim, use_bias=True, activation=None, name='out')
     return out, t_out
 
 
@@ -63,7 +63,7 @@ class Model(object):
             qv_value = out[:, action_dim: 2 * action_dim + 1]
             q_value = qv_value[:, 0: action_dim]
             v_value = qv_value[:, action_dim: action_dim + 1]
-            regret_plus = tf.nn.relu(q_value - action_prob*q_value)
+            regret_plus = tf.nn.softmax(q_value - action_prob*q_value)
 
             pi_weights_v = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'pi')
             pi_update_placeholder = []

@@ -68,9 +68,14 @@ def simulation(_seed, cur_iter):
         # players[i].update_target_weights(players[i].get_weights())
     world = GridRoom(_seed)
     sampled_exp = []
-    ir_list = np.load('index/{}.npy'.format(args.thread))
-    for _p in range(_num_players):
+    ir_lists = []
+    for _pid in range(_num_players):
+        ir_list = np.load('index/{}/{}.npy'.format(_pid, args.thread))
+        ir_lists.append(ir_list)
         sampled_exp.append([])
+        if not os.path.exists('episodes/{}'.format(_pid)):
+            os.mkdir('episodes/{}'.format(_pid))
+
     for _i in range(args.sample_iter):
         for _pid in range(_num_players):
             if cur_iter < 2:
@@ -96,9 +101,9 @@ def simulation(_seed, cur_iter):
             prev_j_ac = copy(joint_action)
             ob = n_state
         world.reset()
-        for _pid in range(1):
+        for _pid in range(_num_players):
             # print('write player')
-            train_writer = tf.python_io.TFRecordWriter('episodes/{}.tfrecords'.format(ir_list[_i+_pid]))
+            train_writer = tf.python_io.TFRecordWriter('episodes/{}/{}.tfrecords'.format(_pid, ir_lists[_pid][_i]))
             v = 0
             for _k in range(len(players[_pid].exp_buffer) - 1, -1, -1):
                 _item = players[_pid].exp_buffer[_k]
